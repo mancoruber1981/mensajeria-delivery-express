@@ -1,0 +1,118 @@
+/* frontend/src/pages/ContadorPage.css */
+
+.contador-page-container {
+    max-width: 1200px;
+    margin: 2rem auto;
+    padding: 2rem;
+    background-color: #ffffff;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.header {
+    text-align: center;
+    color: #0d6efd;
+    margin-bottom: 2rem;
+}
+
+.date-filter-section {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 2rem;
+    padding: 1.5rem;
+    background-color: #f8f9fa;
+    border-radius: 8px;
+    flex-wrap: wrap;
+}
+
+.date-input {
+    padding: 10px;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+}
+
+.generate-button,
+.export-button {
+    padding: 10px 20px;
+    border: none;
+    border-radius: 5px;
+    color: white;
+    font-weight: bold;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+.generate-button {
+    background-color: #0d6efd;
+}
+
+.generate-button:hover {
+    background-color: #0b5ed7;
+}
+
+.export-button {
+    background-color: #198754;
+    display: block;
+    margin: 2rem auto 0;
+}
+
+.export-button:hover {
+    background-color: #157347;
+}
+
+.summary-totals {
+    display: flex;
+    justify-content: space-around;
+    text-align: center;
+    padding: 1.5rem;
+    background-color: #f8f9fa;
+    border-radius: 8px;
+    margin-bottom: 2rem;
+}
+
+.summary-totals p {
+    margin: 0;
+    font-size: 1.1rem;
+}
+
+.summary-totals strong {
+    display: block;
+    font-size: 1.0rem;
+    margin-top: 0.5rem;
+}
+
+.sub-header {
+    margin-top: 2rem;
+    border-bottom: 2px solid #eee;
+    padding-bottom: 0.5rem;
+}
+
+.contador-table {
+    width: 100%;
+    min-width: 600px;
+    border-collapse: collapse;
+    margin-top: 1rem;
+}
+
+.contador-table th,
+.contador-table td {
+    padding: 12px;
+    border-bottom: 1px solid #dee2e6;
+    text-align: left;
+}
+
+.contador-table th {
+    background-color: #f8f9fa;
+}
+
+.ingreso-cell {
+    color: #198754;
+    font-weight: bold;
+}
+
+.egreso-cell {
+    color: #dc3545;
+    font-weight: bold;
+}

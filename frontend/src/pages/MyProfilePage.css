@@ -1,0 +1,43 @@
+/* frontend/src/pages/MyProfilePage.css */
+
+.profile-container {
+    max-width: 800px;
+    margin: 2rem auto;
+    padding: 2rem;
+}
+
+.profile-header {
+    color: #007bff;
+    margin-bottom: 1rem;
+}
+
+.profile-intro {
+    margin-bottom: 2.5rem;
+    color: #555;
+}
+
+.profile-status {
+    margin-top: 1.5rem;
+    font-weight: bold;
+    padding: 10px;
+    border-radius: 5px;
+    text-align: center;
+}
+
+.profile-status.fixed {
+    color: #dc3545;
+    background-color: #f8d7da;
+}
+
+.profile-status.open {
+    color: #198754;
+    background-color: #d1e7dd;
+}
+
+.profile-actions {
+    display: flex;
+    gap: 1rem;
+    justify-content: center;
+    margin-top: 2rem;
+    flex-wrap: wrap;
+}

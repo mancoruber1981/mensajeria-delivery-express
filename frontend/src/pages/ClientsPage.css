@@ -1,0 +1,132 @@
+.clients-page-container {
+    padding: 20px;
+    font-family: 'Arial, sans-serif';
+    max-width: 1200px;
+    margin: 0 auto;
+    background-color: #f9f9f9;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.clients-page-header {
+    color: #007bff;
+    margin-bottom: 20px;
+    text-align: center;
+}
+
+.clients-page-info {
+    margin-bottom: 30px;
+    color: #555;
+    text-align: justify;
+}
+
+.global-buttons-container {
+    margin-bottom: 30px;
+    display: flex;
+    gap: 15px;
+    justify-content: flex-end;
+}
+
+.global-report-button {
+    padding: 10px 20px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 1rem;
+    font-weight: bold;
+    color: white;
+    background-color: #007bff;
+    transition: background-color 0.3s ease;
+}
+
+.global-report-button:hover {
+    background-color: #0056b3;
+}
+
+.export-button {
+    background-color: #28a745;
+}
+
+.export-button:hover {
+    background-color: #218838;
+}
+
+.clients-list-header {
+    margin-top: 20px;
+    color: #007bff;
+}
+
+.no-data-message {
+    text-align: center;
+    color: #777;
+    padding: 20px;
+    background-color: #fff;
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+}
+
+/* Contenedor de la tabla con scroll horizontal */
+.table-responsive-wrapper {
+    overflow-x: auto !important; /* Esta es la clave para el scroll horizontal */
+    -webkit-overflow-scrolling: touch; /* Mejora el scrolling en iOS */
+    width: 100% !important; /* Asegura que el contenedor ocupe todo el ancho disponible */
+    box-sizing: border-box; /* Asegura que el padding no cause desbordamiento */
+    margin-top: 15px;
+    padding: 0 5px; /* Un poco de padding horizontal para que el scroll no quede pegado al borde */
+}
+
+/* La tabla debe tener un ancho mínimo para que el contenedor detecte el desborde */
+.clients-table {
+    min-width: 900px !important; /* Fuerza el ancho mínimo para que se active el scroll */
+    border-collapse: collapse;
+    background-color: #fff;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+}
+
+/* Evita que el texto de las celdas se parta en varias líneas */
+.clients-table th,
+.clients-table td {
+  white-space: nowrap !important;
+}
+
+.clients-table tbody tr:nth-child(even) {
+    background-color: #f2f2f2;
+}
+
+.clients-table tbody tr:hover {
+    background-color: #e9e9e9;
+}
+
+.view-notes-button,
+.view-dashboard-button {
+    padding: 8px 12px;
+    border-radius: 5px;
+    border: none;
+    cursor: pointer;
+    text-decoration: none;
+    color: white;
+    font-size: 0.9rem;
+    font-weight: bold;
+    transition: background-color 0.3s ease;
+}
+
+.view-notes-button {
+    background-color: #ffc107;
+}
+
+.view-notes-button:hover {
+    background-color: #e0a800;
+}
+
+.view-dashboard-button {
+    background-color: #007bff;
+}
+
+@media (max-width: 768px) {
+    .clients-table th, .clients-table td {
+        font-size: 0.8rem;
+        padding: 8px 6px;
+    }
+}

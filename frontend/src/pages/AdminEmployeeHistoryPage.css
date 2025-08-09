@@ -1,0 +1,29 @@
+/* Estilos para AdminEmployeeHistoryPage.css */
+
+.table-responsive-container {
+    width: 100%;
+    overflow-x: auto;
+    border: 1px solid #e9ecef;
+    border-radius: 8px;
+    margin-top: 2rem; /* El margen que antes estaba en línea */
+    background-color: white;
+}
+
+.table-responsive-container table {
+    width: 100%;
+    min-width: 900px; /* Ancho mínimo para forzar el scroll */
+    border-collapse: collapse;
+}
+
+.table-responsive-container th,
+.table-responsive-container td {
+    padding: 12px 15px;
+    white-space: nowrap;
+    text-align: left;
+    border-bottom: 1px solid #e9ecef;
+}
+
+.table-responsive-container th {
+    background-color: #f8f9fa;
+    font-weight: 600;
+}

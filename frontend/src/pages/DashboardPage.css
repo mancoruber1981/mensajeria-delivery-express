@@ -1,0 +1,56 @@
+/* 📄 RepartidorDashboardPage.css */
+
+/* --- 1. Contenedor general de la página --- */
+.time-entry-page-wrapper {
+  padding: 1rem;
+}
+
+/* --- 2. Contenedor con scroll horizontal para tabla --- */
+.table-responsive-container {
+  width: 100%;
+  overflow-x: auto;
+}
+
+/* Define un ancho mínimo para evitar que la tabla se aplaste */
+.table-responsive-container table {
+  min-width: 700px; /* Puedes ajustar este valor si lo necesitas */
+  border-collapse: collapse;
+  width: 100%;
+}
+
+/* --- 3. Celdas de la tabla --- */
+.table-responsive-container th,
+.table-responsive-container td {
+  border: 1px solid #ddd;
+  padding: 8px;
+  text-align: left;
+}
+
+/* Filas pares con fondo gris claro */
+.table-responsive-container tr:nth-child(even) {
+  background-color: #f2f2f2;
+}
+
+/* --- 4. Botones de acción dentro de la tabla --- */
+.action-buttons {
+  white-space: nowrap;
+}
+
+/* --- 5. Formularios de ingreso de tiempo --- */
+.time-entry-form-wrapper .form-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.time-entry-form-wrapper .form-group-half {
+  flex: 1 1 calc(50% - 1rem);
+  box-sizing: border-box;
+}
+
+/* --- 6. Responsividad en móviles --- */
+@media (max-width: 600px) {
+  .time-entry-form-wrapper .form-group-half {
+    flex: 1 1 100%;
+  }
+}

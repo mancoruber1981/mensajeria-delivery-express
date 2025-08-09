@@ -1,0 +1,245 @@
+/* src/App.css */
+
+/* ------------------------------------------------------------- */
+/* ESTILOS GLOBALES Y VARIABLES */
+/* ------------------------------------------------------------- */
+
+:root {
+  --primary-color: #007bff;
+  --secondary-color: #6c757d;
+  --success-color: #28a745;
+  --danger-color: #dc3545;
+  --bg-color: #f4f7f9;
+  --card-bg: #ffffff;
+  --text-color: #333;
+  --border-color: #e0e0e0;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  background-color: var(--bg-color);
+  color: var(--text-color);
+  margin: 0;
+  padding: 0;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  margin-top: 0;
+  margin-bottom: 0.5rem;
+  color: #1a202c;
+}
+
+/* ------------------------------------------------------------- */
+/* LAYOUT PRINCIPAL (Dashboard) */
+/* ------------------------------------------------------------- */
+
+.dashboard-container {
+  display: grid;
+  grid-template-columns: 250px 1fr;
+  min-height: 100vh;
+  gap: 20px;
+  padding: 20px;
+}
+
+.desktop-navbar {
+  background-color: var(--card-bg);
+  padding: 20px;
+  border-radius: 8px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.main-content {
+  background-color: var(--card-bg);
+  padding: 20px;
+  border-radius: 8px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+/* ------------------------------------------------------------- */
+/* ESTILOS DE COMPONENTES BÁSICOS */
+/* ------------------------------------------------------------- */
+
+/* Botones */
+.btn {
+  padding: 10px 15px;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  font-weight: bold;
+  transition: background-color 0.3s ease;
+}
+
+.btn-primary {
+  background-color: var(--primary-color);
+  color: white;
+}
+
+.btn-primary:hover {
+  background-color: #0056b3;
+}
+
+/* Tarjetas de información */
+.card-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  margin-top: 20px;
+}
+
+.card {
+  flex: 1 1 200px;
+  background-color: var(--bg-color);
+  border-radius: 8px;
+  padding: 20px;
+  text-align: center;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+/* ------------------------------------------------------------- */
+/* TABLAS: Contenedor y Estilos Base */
+/* ------------------------------------------------------------- */
+.table-responsive-container {
+    width: 100%;
+    overflow-x: auto; /* Permite el scroll horizontal */
+    -webkit-overflow-scrolling: touch; /* Mejora el scroll en iOS */
+    margin-top: 20px;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+    background-color: var(--card-bg);
+}
+
+.responsive-table {
+    min-width: 900px; /* ¡CLAVE! Define el ancho mínimo de la tabla. */
+    width: 100%; /* La tabla siempre intentará ser el 100% del contenedor */
+    border-collapse: collapse;
+}
+
+.responsive-table th,
+.responsive-table td {
+    padding: 12px;
+    text-align: left;
+    border-bottom: 1px solid var(--border-color);
+    white-space: nowrap; /* Evita que el texto se parta en varias líneas */
+}
+
+.responsive-table th {
+    background-color: #f2f2f2;
+}
+
+.responsive-table tbody tr:nth-child(even) {
+    background-color: #f2f2f2;
+}
+
+.responsive-table tbody tr:hover {
+    background-color: #e9e9e9;
+}
+/* ------------------------------------------------------------- */
+/* ESTILOS DE FORMULARIOS */
+/* ------------------------------------------------------------- */
+
+.form-container {
+  max-width: 500px;
+  margin: 40px auto;
+  padding: 30px;
+  background-color: var(--card-bg);
+  border-radius: 8px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.form-group {
+  margin-bottom: 20px;
+}
+
+.form-group label {
+  display: block;
+  font-weight: bold;
+  margin-bottom: 8px;
+}
+
+.form-group input,
+.form-group select,
+.form-group textarea {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 5px;
+  font-size: 1rem;
+  box-sizing: border-box; /* Asegura que padding y border no excedan el ancho total */
+  transition: border-color 0.3s ease;
+}
+
+.form-group input:focus,
+.form-group select:focus,
+.form-group textarea:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+}
+
+.form-button {
+  width: 100%;
+  padding: 12px;
+  font-size: 1.1rem;
+  font-weight: bold;
+  background-color: var(--primary-color);
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+}
+
+.form-button:hover {
+  background-color: #0056b3;
+}
+
+/* ------------------------------------------------------------- */
+/* MEDIA QUERIES (PARA PANTALLAS MÓVILES) */
+/* ------------------------------------------------------------- */
+
+@media (max-width: 768px) {
+    .dashboard-container {
+        grid-template-columns: 1fr;
+        padding: 10px;
+        gap: 10px;
+    }
+
+    /* --- AJUSTES DE TEXTO AÑADIDOS --- */
+    .dashboard-container h1 {
+        font-size: 1.4rem; /* Reducimos el tamaño del título principal */
+        text-align: center;  /* Juntamos un poco las líneas si el título es largo */
+    }
+
+    .dashboard-container p {
+        font-size: 0.9rem; /* Hacemos el texto de párrafo un poco más pequeño */
+    }
+
+    .dashboard-container h2 {
+        font-size: 1.3rem; /* Reducimos el subtítulo ('Mensajeros de...') */
+    }
+    /* --- FIN DE AJUSTES --- */
+    
+    .desktop-navbar {
+        display: none; /* Ocultamos la barra de navegación de escritorio */
+    }
+
+    .main-content {
+        padding: 15px;
+    }
+
+    /* Cambiamos la dirección de los elementos de las tarjetas para que se apilen */
+    .card-container {
+        flex-direction: column;
+        gap: 15px;
+    }
+
+    .card {
+        flex: 1 1 100%; /* Las tarjetas ocupan el 100% del ancho */
+    }
+    
+/* Corrección para asegurar que el scroll horizontal funcione */
+.dashboard-card, .dashboard-container {
+    overflow-x: visible;
+}
+
+}

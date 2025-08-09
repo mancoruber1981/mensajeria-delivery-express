@@ -1,0 +1,95 @@
+/* frontend/src/pages/Admin/UserApprovalPage.css */
+
+/* Estilos base para la página */
+.user-approval-container {
+    padding: 2rem;
+    max-width: 900px;
+    margin: 0 auto;
+    font-family: Arial, sans-serif;
+}
+
+/* Estilos de la tabla */
+.user-approval-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 1rem;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+.user-approval-table th,
+.user-approval-table td {
+    padding: 8px 10px; /* Reducción del padding */
+    text-align: left;
+    border-bottom: 1px solid #ddd;
+    font-size: 0.9rem; /* Tamaño de fuente más pequeño */
+}
+
+.user-approval-table thead th {
+    background-color: #f2f2f2;
+    font-weight: bold;
+    color: #333;
+    font-size: 1rem; /* Tamaño de fuente del encabezado */
+}
+
+/* Efecto de hover en las filas */
+.user-approval-table tbody tr:hover {
+    background-color: #f9f9f9;
+}
+
+/* Estilo para las celdas de acciones */
+.user-approval-table td.actions-cell {
+    text-align: center;
+    white-space: nowrap; /* Evita que el botón se parta */
+}
+
+/* Estilo de los botones */
+.user-approval-table button {
+    background-color: #0d6efd;
+    color: white;
+    border: none;
+    padding: 6px 12px; /* Reducción del padding del botón */
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.85rem; /* Tamaño de fuente del botón */
+    transition: background-color 0.3s ease;
+}
+
+.user-approval-table button:hover {
+    background-color: #0b5ed7;
+}
+
+/* Estilos para mensajes de estado */
+.loading-message,
+.error-message,
+.no-users-message {
+    text-align: center;
+    padding: 1rem;
+    font-size: 1.1rem;
+    color: #555;
+}
+
+.error-message {
+    color: #dc3545;
+}
+
+/* Media Query para pantallas pequeñas (ej. móviles) */
+@media (max-width: 600px) {
+    .user-approval-container {
+        padding: 1rem;
+    }
+
+    .user-approval-table th,
+    .user-approval-table td {
+        padding: 6px 8px; /* Padding más pequeño */
+        font-size: 0.8rem; /* Tamaño de fuente más pequeño */
+    }
+
+    .user-approval-table th {
+        font-size: 0.9rem;
+    }
+
+    .user-approval-table button {
+        padding: 4px 8px; /* Botones más pequeños */
+        font-size: 0.75rem;
+    }
+}

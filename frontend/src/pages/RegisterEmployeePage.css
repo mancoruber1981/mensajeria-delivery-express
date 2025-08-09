@@ -1,0 +1,101 @@
+.register-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    padding: 20px;
+    background-color: #f0f2f5;
+}
+
+.register-card {
+    background-color: #ffffff;
+    padding: 40px;
+    border-radius: 10px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+    width: 100%;
+    max-width: 600px;
+}
+
+.register-header {
+    text-align: center;
+    color: #333;
+    margin-bottom: 25px;
+    font-size: 2rem;
+}
+
+.form-group {
+    margin-bottom: 15px;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: bold;
+    color: #555;
+}
+
+.form-group input,
+.form-group select {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    font-size: 1rem;
+    box-sizing: border-box;
+}
+
+.form-group select {
+    height: 40px;
+    cursor: pointer;
+}
+
+.role-details-container,
+.credentials-container {
+    border-top: 1px solid #eee;
+    padding-top: 20px;
+    margin-top: 20px;
+}
+
+.role-details-container h3,
+.credentials-container h3 {
+    color: #007bff;
+    margin-bottom: 15px;
+}
+
+.submit-button {
+    width: 100%;
+    padding: 12px;
+    background-color: #007bff;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    font-size: 1.1rem;
+    font-weight: bold;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+}
+
+.submit-button:hover {
+    background-color: #0056b3;
+}
+
+.input-error {
+    border-color: #dc3545 !important;
+}
+
+.error-text {
+    color: #dc3545;
+    font-size: 0.875rem;
+    margin-top: 5px;
+}
+
+/* Estilos para responsividad en dispositivos móviles */
+@media (max-width: 600px) {
+    .register-card {
+        padding: 20px;
+    }
+    
+    .register-header {
+        font-size: 1.5rem;
+    }
+}

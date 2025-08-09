@@ -1,0 +1,80 @@
+/* frontend/src/pages/HomePage.css */
+
+.homepage-container {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    min-height: calc(100vh - 80px); /* Ajustado para un navbar un poco más alto */
+    text-align: center;
+    padding: 2rem;
+    background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+}
+
+.company-title {
+    font-family: 'Cinzel', serif; /* Asegúrate de que esta fuente esté importada en index.css */
+    font-size: 3.5rem;
+    color: #1c3d5a; /* Un azul más oscuro y corporativo */
+    margin-bottom: 1rem;
+    text-shadow: 1px 1px 3px rgba(0,0,0,0.1);
+}
+
+.company-title .highlight {
+    color: #007bff;
+}
+
+.tagline {
+    font-size: 1.3rem;
+    color: #555;
+    margin-bottom: 2.5rem;
+    max-width: 600px;
+}
+
+.button-group {
+    display: flex;
+    gap: 1.5rem; /* Un poco más de espacio */
+    margin-bottom: 3rem;
+}
+
+.action-button {
+    text-decoration: none;
+    padding: 15px 35px;
+    border-radius: 30px;
+    font-size: 1.1rem;
+    font-weight: bold;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+    border: 2px solid transparent;
+}
+
+.action-button.primary-button {
+    background-color: #007bff;
+    color: white;
+}
+
+.action-button.primary-button:hover {
+    background-color: #0056b3;
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+}
+
+.action-button.secondary-button {
+    background-color: #ffffff;
+    color: #007bff;
+    border-color: #007bff;
+}
+
+.action-button.secondary-button:hover {
+    background-color: #007bff;
+    color: white;
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+}
+
+.hero-image {
+    margin-top: 2rem;
+    max-width: 100%;
+    width: 500px;
+    border-radius: 10px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+}

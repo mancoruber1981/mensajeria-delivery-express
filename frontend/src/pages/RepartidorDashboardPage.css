@@ -1,0 +1,54 @@
+/* Estilos para el contenedor de la página */
+.time-entry-page-wrapper {
+  padding: 1rem;
+}
+
+/* Estilo para el contenedor de la tabla para que tenga scroll horizontal */
+.table-responsive-container {
+    width: 100%;
+    overflow-x: auto;
+}
+
+/* Define un ancho mínimo para la tabla para que no se vea aplastada */
+.table-responsive-container table {
+    min-width: 700px; /* Puedes ajustar este valor si lo necesitas */
+    border-collapse: collapse;
+    width: 100%;
+}
+
+/* Estilos para las celdas de la tabla */
+.table-responsive-container th,
+.table-responsive-container td {
+    border: 1px solid #ddd;
+    padding: 8px;
+    text-align: left;
+}
+
+/* Estilos de las filas impares */
+.table-responsive-container tr:nth-child(even) {
+    background-color: #f2f2f2;
+}
+
+/* Estilos para los botones de acción dentro de la tabla */
+.action-buttons {
+    white-space: nowrap;
+}
+
+/* Estilos para los formularios */
+.time-entry-form-wrapper .form-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+}
+
+.time-entry-form-wrapper .form-group-half {
+    flex: 1 1 calc(50% - 1rem);
+    box-sizing: border-box;
+}
+
+/* Media query para móviles */
+@media (max-width: 600px) {
+    .time-entry-form-wrapper .form-group-half {
+        flex: 1 1 100%;
+    }
+}
