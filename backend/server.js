@@ -33,9 +33,9 @@ process.on('uncaughtException', (err) => {
 
 // 1. MIDDLEWARE DE CORS (DEBE IR MUY PRONTO para permitir la comunicación)
 app.use(cors({
-    origin: 'http://localhost:3000', // Permitir solo solicitudes desde tu frontend
-    methods: ['GET', 'POST', 'PUT', 'DELETE'], // Métodos HTTP permitidos
-    allowedHeaders: ['Content-Type', 'Authorization'], // Encabezados permitidos (CRUCIAL para el token)
+    origin: process.env.CORS_ORIGIN.split(','),
+    methods: ['GET', 'POST', 'PUT', 'DELETE'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
 }));
 
 // 2. MIDDLEWARES PARA PROCESAR EL CUERPO DE LAS SOLICITUDES (JSON, URL-encoded)
