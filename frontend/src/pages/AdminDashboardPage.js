@@ -1,6 +1,4 @@
-// frontend/src/pages/AdminDashboardPage.js
-
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'; // Agrupado Link con useNavigate
 import { useAuth } from '../contexts/AuthContext';
 import { toast } from 'react-toastify';
@@ -22,54 +20,53 @@ const AdminDashboardPage = () => {
 
     // Efecto para cargar los datos del dashboard
     useEffect(() => {
-    const fetchData = async () => {
-        // Validación de acceso
-        if (!user || user.role !== 'admin') {
-            setError('Acceso denegado. Esta página es solo para administradores.');
-            setLoading(false);
-            return;
-        }
-
-        setLoading(true);
-        setError(null);
-
-        try {
-            // 1️⃣ Llamada original a /admin/stats
-            const { data } = await API.get('/admin/stats');
-
-            if (data && data.stats) {
-                setTotalChargedToClients(data.stats.totalACobrar);
-                setTotalToPayCouriers(data.stats.totalAPagar);
-                setProfit(data.stats.gananciaEstimada);
-            } else {
-                console.error("La estructura de datos del dashboard no es la esperada.");
-                setError("Error al procesar los datos del dashboard.");
+        const fetchData = async () => {
+            // Validación de acceso
+            if (!user || user.role !== 'admin') {
+                setError('Acceso denegado. Esta página es solo para administradores.');
+                setLoading(false);
+                return;
             }
 
-            // 2️⃣ Llamada a /employees para calcular y comparar
-            const { data: empData } = await API.get('/employees');
-            if (Array.isArray(empData.employees)) {
-                const sumaEmployees = empData.employees.reduce(
-                    (acc, emp) => acc + (parseFloat(emp.totalPorPagar) || 0),
-                    0
-                );
-                // Mostramos en consola y como toast para ver la diferencia
-                console.log(`💡 Comparativa: Stats = ${data.stats.totalAPagar}, Employees = ${sumaEmployees}`);
-                toast.info(`Comparativa → Stats: ${data.stats.totalAPagar} | Employees: ${sumaEmployees}`);
+            setLoading(true);
+            setError(null);
+
+            try {
+                // 1️⃣ Llamada original a /admin/stats
+                const { data } = await API.get('/admin/stats');
+
+                if (data && data.stats) {
+                    setTotalChargedToClients(data.stats.totalACobrar);
+                    setTotalToPayCouriers(data.stats.totalAPagar);
+                    setProfit(data.stats.gananciaEstimada);
+                } else {
+                    console.error("La estructura de datos del dashboard no es la esperada.");
+                    setError("Error al procesar los datos del dashboard.");
+                }
+
+                // 2️⃣ Llamada a /employees para calcular y comparar
+                const { data: empData } = await API.get('/employees');
+                if (Array.isArray(empData.employees)) {
+                    const sumaEmployees = empData.employees.reduce(
+                        (acc, emp) => acc + (parseFloat(emp.totalPorPagar) || 0),
+                        0
+                    );
+                    // Mostramos en consola y como toast para ver la diferencia
+                    console.log(`💡 Comparativa: Stats = ${data.stats.totalAPagar}, Employees = ${sumaEmployees}`);
+                    toast.info(`Comparativa → Stats: ${data.stats.totalAPagar} | Employees: ${sumaEmployees}`);
+                }
+            } catch (err) {
+                const errorMessage = err.response?.data?.message || 'Error al cargar datos del administrador.';
+                setError(errorMessage);
+                toast.error(errorMessage);
+            } finally {
+                setLoading(false);
             }
+        };
 
-        } catch (err) {
-            const errorMessage = err.response?.data?.message || 'Error al cargar datos del administrador.';
-            setError(errorMessage);
-            toast.error(errorMessage);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    fetchData();
-}, [user, navigate]);
-
+        fetchData();
+    }, [user, navigate]);
+    
     // Renderizado condicional basado en el estado de carga y error
     if (loading) {
         return <LoadingSpinner />;
