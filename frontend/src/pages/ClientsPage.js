@@ -1,4 +1,9 @@
-// Bloque 1: Importaciones
+// ====================
+// Página: Dashboard Cliente
+// Componente: DashboardClientePage
+// Descripción: Vista principal para el cliente con gestión de mensajeros, tarifas y reportes.
+// ====================
+
 import React, { useState, useEffect } from 'react';
 import API from '../api/api';
 import { toast } from 'react-toastify';

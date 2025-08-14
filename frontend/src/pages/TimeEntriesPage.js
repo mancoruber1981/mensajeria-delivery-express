@@ -1,3 +1,9 @@
+// ====================
+// Página: Registro de Horarios por Empleado
+// Componente: TimeEntriesPage
+// Descripción: Permite registrar y gestionar las horas trabajadas por un empleado, incluyendo horas brutas, descuentos, deducciones y cálculo de valor final.
+// ====================
+
 // Bloque 1: Importaciones 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';

@@ -22,44 +22,53 @@ const AdminDashboardPage = () => {
 
     // Efecto para cargar los datos del dashboard
     useEffect(() => {
-        const fetchData = async () => {
-            // Validación de acceso antes de intentar cargar datos
-            if (!user || user.role !== 'admin') {
-                setError('Acceso denegado. Esta página es solo para administradores.');
-                setLoading(false);
-                return;
+    const fetchData = async () => {
+        // Validación de acceso
+        if (!user || user.role !== 'admin') {
+            setError('Acceso denegado. Esta página es solo para administradores.');
+            setLoading(false);
+            return;
+        }
+
+        setLoading(true);
+        setError(null);
+
+        try {
+            // 1️⃣ Llamada original a /admin/stats
+            const { data } = await API.get('/admin/stats');
+
+            if (data && data.stats) {
+                setTotalChargedToClients(data.stats.totalACobrar);
+                setTotalToPayCouriers(data.stats.totalAPagar);
+                setProfit(data.stats.gananciaEstimada);
+            } else {
+                console.error("La estructura de datos del dashboard no es la esperada.");
+                setError("Error al procesar los datos del dashboard.");
             }
 
-            setLoading(true); // Inicia el loading antes de la llamada a la API
-            setError(null);   // Limpia errores previos
-
-            try {
-    // Llamada a la API para obtener las estadísticas
-    const { data } = await API.get('/admin/stats');
-
-    // Verifica si la propiedad 'stats' existe antes de acceder a ella
-    if (data && data.stats) {
-        // Actualiza los estados con los datos correctos del backend
-        setTotalChargedToClients(data.stats.totalACobrar);
-        setTotalToPayCouriers(data.stats.totalAPagar);
-        setProfit(data.stats.gananciaEstimada);
-    } else {
-        // Manejar el caso en que los datos no vienen como se esperaba
-        console.error("La estructura de datos del dashboard no es la esperada.");
-        setError("Error al procesar los datos del dashboard.");
-    }
-
-} catch (err) {
-                const errorMessage = err.response?.data?.message || 'Error al cargar datos del administrador.';
-                setError(errorMessage);
-                toast.error(errorMessage);
-            } finally {
-                setLoading(false); // Finaliza el loading en cualquier caso
+            // 2️⃣ Llamada a /employees para calcular y comparar
+            const { data: empData } = await API.get('/employees');
+            if (Array.isArray(empData.employees)) {
+                const sumaEmployees = empData.employees.reduce(
+                    (acc, emp) => acc + (parseFloat(emp.totalPorPagar) || 0),
+                    0
+                );
+                // Mostramos en consola y como toast para ver la diferencia
+                console.log(`💡 Comparativa: Stats = ${data.stats.totalAPagar}, Employees = ${sumaEmployees}`);
+                toast.info(`Comparativa → Stats: ${data.stats.totalAPagar} | Employees: ${sumaEmployees}`);
             }
-        };
 
-        fetchData();
-    }, [user, navigate]); // Dependencias: user y navigate para re-ejecutar si cambian
+        } catch (err) {
+            const errorMessage = err.response?.data?.message || 'Error al cargar datos del administrador.';
+            setError(errorMessage);
+            toast.error(errorMessage);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    fetchData();
+}, [user, navigate]);
 
     // Renderizado condicional basado en el estado de carga y error
     if (loading) {
