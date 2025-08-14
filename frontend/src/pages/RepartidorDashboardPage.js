@@ -293,11 +293,11 @@ const RepartidorDashboardPage = () => {
                             </div>
                             <div className="form-group form-group-half">
                                 <label>Hora Inicio:</label>
-                                <input type="text" name="horaInicio" value={formData.horaInicio} onChange={handleFormChange} required />
+                                <input type="time" name="horaInicio" value={formData.horaInicio} onChange={handleFormChange} required />
                             </div>
                             <div className="form-group form-group-half">
                                 <label>Hora Fin:</label>
-                                <input type="text" name="horaFin" value={formData.horaFin} onChange={handleFormChange} required />
+                                <input type="time" name="horaFin" value={formData.horaFin} onChange={handleFormChange} required />
                             </div>
                         </div>
                         <div className="form-row">
