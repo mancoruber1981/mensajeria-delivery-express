@@ -7,6 +7,28 @@ import API from '../api/api';
 import LoadingSpinner from '../components/LoadingSpinner';
 import '../index.css';
 
+
+// Esta función auxiliar se mantiene para formatear la visualización
+const formatHoursAndMinutes = (decimalHours) => {
+    const hours = Math.floor(decimalHours);
+    const minutes = Math.round((decimalHours - hours) * 60);
+    return `${hours}:${minutes.toString().padStart(2, '0')}`;
+};
+
+// **Aquí va la nueva función**
+const parse12HourTime = (timeString) => {
+    if (!timeString) return null;
+    const [time, period] = timeString.split(' ');
+    let [hours, minutes] = time.split(':').map(Number);
+    
+    if (period && period.toLowerCase() === 'p.m.' && hours !== 12) {
+        hours += 12;
+    } else if (period && period.toLowerCase() === 'a.m.' && hours === 12) {
+        hours = 0;
+    }
+    return { hours, minutes };
+}
+
 // Bloque 2
 const RepartidorDashboardPage = () => {
     const navigate = useNavigate();
@@ -43,57 +65,67 @@ const RepartidorDashboardPage = () => {
     const [pageLoading, setPageLoading] = useState(true);
     const [error, setError] = useState(null);
 
-    // Bloque 3
+    // Bloque 3 (Corregido: La lógica de cálculo ahora es más robusta)
     const recalculateTotals = useCallback((data) => {
-        const { horaInicio, horaFin, valorHora, descuentoAlmuerzo, minutosAlmuerzoSinPago, montoPrestamoDeducir } = data;
+        const { horaInicio, horaFin, valorHora, minutosAlmuerzoSinPago, montoPrestamoDeducir } = data;
 
         if (horaInicio && horaFin && valorHora) {
-            const start = new Date(`1970-01-01T${horaInicio}:00`);
-            let end = new Date(`1970-01-01T${horaFin}:00`);
-            if (end < start) end.setDate(end.getDate() + 1);
+            const [startHours, startMinutes] = horaInicio.split(':').map(Number);
+            const [endHours, endMinutes] = horaFin.split(':').map(Number);
 
-            let diffMs = end - start;
+            let totalMinutesBrutos = (endHours * 60 + endMinutes) - (startHours * 60 + startMinutes);
+            if (totalMinutesBrutos < 0) {
+                totalMinutesBrutos += 24 * 60;
+            }
 
             const minutosSinPagoNum = parseInt(minutosAlmuerzoSinPago, 10) || 0;
             const valorHoraNum = parseFloat(valorHora) || 0;
-
-            const almuerzoDescontadoMonetario = (parseFloat(descuentoAlmuerzo) || 0);
-
-            diffMs -= minutosSinPagoNum * 60 * 1000;
-
-            const totalHours = diffMs / (1000 * 60 * 60);
-            const hours = Math.floor(totalHours);
-            const minutes = Math.round((totalHours - hours) * 60);
-
-            const sub = totalHours * valorHoraNum;
-
-            const total = sub - almuerzoDescontadoMonetario;
-
             const prestamoADeducir = parseFloat(montoPrestamoDeducir) || 0;
-            const finalValue = total - prestamoADeducir;
 
-            setHorasBrutas(`${hours}:${minutes.toString().padStart(2, '0')}`);
-            setSubtotal(sub);
-            setValorNeto(total);
-            setValorFinalConDeducciones(finalValue);
+            const totalMinutesNetos = totalMinutesBrutos - minutosSinPagoNum;
+
+            // Ahora los cálculos se basan en los minutos, no en horas decimales directas
+            const valorNetoCalculado = (totalMinutesNetos / 60) * valorHoraNum;
+            const subtotalCalculado = (totalMinutesBrutos / 60) * valorHoraNum;
+
+            const finalValue = valorNetoCalculado - prestamoADeducir;
+
+            const horasBrutasFormato = formatHoursAndMinutes(totalMinutesBrutos / 60);
+
+            return {
+                minutosBrutos: totalMinutesBrutos,
+                horasBrutas: horasBrutasFormato,
+                subtotal: subtotalCalculado, // No redondeamos aquí para mantener la precisión
+                valorNeto: valorNetoCalculado, // No redondeamos aquí
+                valorFinalConDeducciones: finalValue // No redondeamos aquí
+            };
         } else {
-            setHorasBrutas('0:00');
-            setSubtotal(0);
-            setValorNeto(0);
-            setValorFinalConDeducciones(0);
+            return {
+                minutosBrutos: 0,
+                horasBrutas: '00:00',
+                subtotal: 0,
+                valorNeto: 0,
+                valorFinalConDeducciones: 0
+            };
         }
     }, []);
 
-    // Bloque 4
+
+    // Bloque 4 (Corregido)
     useEffect(() => {
-        recalculateTotals(formData);
+        // Usamos el resultado de la función para actualizar el estado
+        const results = recalculateTotals(formData);
+        setHorasBrutas(results.horasBrutas);
+        setSubtotal(results.subtotal);
+        setValorNeto(results.valorNeto);
+        setValorFinalConDeducciones(results.valorFinalConDeducciones);
     }, [formData, recalculateTotals]);
 
-    // Bloque 5
+    // Bloque 5 (Corregido)
     useEffect(() => {
         if (editingLog) {
-            setFormData(prev => ({
-                ...prev,
+            const logFormatted = {
+                ...editingLog,
                 valorHora: editingLog.valorHora?.toString() || '0',
                 date: new Date(editingLog.date).toISOString().split('T')[0],
                 festivo: editingLog.festivo ?? false,
@@ -103,18 +135,15 @@ const RepartidorDashboardPage = () => {
                 horaFin: editingLog.horaFin || '',
                 empresa: editingLog.empresa || '',
                 montoPrestamoDeducir: editingLog.totalLoanDeducted?.toString() || '0'
-            }));
-            recalculateTotals({
-                ...editingLog,
-                montoPrestamoDeducir: editingLog.totalLoanDeducted || 0
-            });
+            };
+            setFormData(logFormatted);
         }
-    }, [editingLog, recalculateTotals]);
+    }, [editingLog]);
 
     // Bloque 6: Fetch de Datos del Repartidor (Centralizado)
     const fetchRepartidorData = useCallback(async () => {
-        setPageLoading(true); // Siempre activar loading al iniciar la carga
-        setError(null); // Limpiar errores previos
+        setPageLoading(true);
+        setError(null);
         const currentTargetEmployeeId = isAdminView ? employeeId : user?.profile?._id;
 
         if (!user || !currentTargetEmployeeId) {
@@ -140,7 +169,7 @@ const RepartidorDashboardPage = () => {
             setError(err.response?.data?.message || "Error al cargar los datos del repartidor.");
             toast.error(err.response?.data?.message || "Error al cargar los datos del repartidor.");
         } finally {
-            setPageLoading(false); // Siempre desactivar loading al finalizar (éxito o error)
+            setPageLoading(false);
         }
     }, [user, employeeId, isAdminView]);
 
@@ -157,7 +186,7 @@ const RepartidorDashboardPage = () => {
         setFormData(prev => ({ ...prev, [name]: type === 'checkbox' ? checked : value }));
     };
 
-    // Bloque 9 (Corregido: handleSubmit)
+    // Bloque 9 (handleSubmit corregido para enviar los datos precisos)
     const handleSubmit = async (e) => {
         e.preventDefault();
         const currentTargetEmployeeId = isAdminView ? employeeId : user?.profile?._id;
@@ -171,6 +200,9 @@ const RepartidorDashboardPage = () => {
             return;
         }
 
+        // Obtiene los valores calculados de manera síncrona
+        const calculatedValues = recalculateTotals(formData);
+
         const dataToSend = {
             employee: currentTargetEmployeeId,
             date: formData.date,
@@ -182,19 +214,24 @@ const RepartidorDashboardPage = () => {
             minutosAlmuerzoSinPago: parseInt(formData.minutosAlmuerzoSinPago, 10),
             empresa: formData.empresa.trim(),
             totalLoanDeducted: parseFloat(formData.montoPrestamoDeducir) || 0,
+            
+            // **CORRECCIÓN CLAVE:** Enviar los valores calculados con precisión
+            horasBrutas: calculatedValues.minutosBrutos / 60, // Guardamos el valor decimal exacto
+            subtotal: calculatedValues.subtotal,
+            valorNeto: calculatedValues.valorNeto,
+            valorFinalConDeducciones: calculatedValues.valorFinalConDeducciones,
         };
 
         try {
-            if (editingLog) {
+            if (editingLog && editingLog._id) {
                 await API.put(`/timelogs/${editingLog._id}`, dataToSend);
                 toast.success('Registro actualizado con éxito');
             } else {
                 await API.post('/timelogs', dataToSend);
                 toast.success('Registro guardado con éxito');
             }
-
             fetchRepartidorData();
-
+            setEditingLog(null);
             setFormData({
                 date: new Date().toISOString().split('T')[0],
                 horaInicio: '',
@@ -206,7 +243,6 @@ const RepartidorDashboardPage = () => {
                 empresa: '',
                 montoPrestamoDeducir: '0'
             });
-            setEditingLog(null);
         } catch (err) {
             console.error("Error en handleSubmit:", err.response?.data?.message || err.message);
             toast.error(err.response?.data?.message || 'Error al guardar.');
@@ -230,7 +266,6 @@ const RepartidorDashboardPage = () => {
 
         setEditingLog(logToEdit);
         setFormData(logFormatted);
-        recalculateTotals(logFormatted);
         formRef?.current?.scrollIntoView({
             behavior: 'smooth',
             block: 'start'
@@ -255,12 +290,9 @@ const RepartidorDashboardPage = () => {
     if (pageLoading) return <LoadingSpinner />;
     if (error) return <div className="error-message">Error: {error}</div>;
 
-    // --- INICIO DE LA CORRECCIÓN ---
-    // Verificamos si el usuario es repartidor O si es un admin viendo un perfil específico
     if (user?.role !== 'repartidor' && !(user?.role === 'admin' && employeeId)) {
         return <div className="error-message">Acceso denegado.</div>;
     }
-    // --- FIN DE LA CORRECCIÓN ---
 
     // Bloque 13
     return (
@@ -338,16 +370,16 @@ const RepartidorDashboardPage = () => {
                                 </div>
                                 <div className="form-group form-group-half">
                                     <label>Subtotal ($):</label>
-                                    <input type="text" value={`$ ${subtotal.toLocaleString('es-CO')}`} readOnly className="read-only-input" />
+                                    <input type="text" value={`$ ${subtotal.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} readOnly className="read-only-input" />
                                 </div>
                             </div>
                             <div className="form-group">
                                 <label>Valor Neto Inicial ($):</label>
-                                <input type="text" value={`$ ${valorNeto.toLocaleString('es-CO')}`} readOnly className="read-only-input" />
+                                <input type="text" value={`$ ${valorNeto.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} readOnly className="read-only-input" />
                             </div>
                             <div className="form-group">
                                 <label>Valor Neto Final ($):</label>
-                                <input type="text" value={`$ ${valorFinalConDeducciones.toLocaleString('es-CO')}`} readOnly className="read-only-input" />
+                                <input type="text" value={`$ ${valorFinalConDeducciones.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} readOnly className="read-only-input" />
                             </div>
                             <hr />
                         </>
@@ -382,22 +414,30 @@ const RepartidorDashboardPage = () => {
                                 </tr>
                             </thead>
                             <tbody>
-                                {timeLogs.map(log => (
-                                    <tr key={log._id}>
-                                        <td>{new Date(log.date).toLocaleDateString('es-CO', { timeZone: 'UTC' })}</td>
-                                        <td>{log.empresa || 'N/A'}</td>
-                                        <td>{log.horaInicio}</td>
-                                        <td>{log.horaFin}</td>
-                                        <td>{log.horasBrutas}</td>
-                                        <td>${(log.valorNeto || 0).toLocaleString('es-CO')}</td>
-                                        <td>${(log.totalLoanDeducted || 0).toLocaleString('es-CO')}</td>
-                                        <td>${((log.valorNeto || 0) - (log.totalLoanDeducted || 0)).toLocaleString('es-CO')}</td>
-                                        <td className="action-buttons">
-                                            <button className="button-edit" onClick={() => handleEdit(log)}>Editar</button>
-                                            <button className="button-delete" onClick={() => handleDelete(log._id)}>Eliminar</button>
-                                        </td>
-                                    </tr>
-                                ))}
+                                {timeLogs.map(log => {
+                                    const valorNetoInicial = log.valorNeto || 0;
+                                    const deduccion = log.totalLoanDeducted || 0;
+                                    const valorNetoFinal = valorNetoInicial - deduccion;
+                                    
+                                    const horasBrutasFormateadas = formatHoursAndMinutes(log.horasBrutas);
+
+                                    return (
+                                        <tr key={log._id}>
+                                            <td>{new Date(log.date).toLocaleDateString('es-CO', { timeZone: 'UTC' })}</td>
+                                            <td>{log.empresa || 'N/A'}</td>
+                                            <td>{log.horaInicio}</td>
+                                            <td>{log.horaFin}</td>
+                                            <td>{horasBrutasFormateadas}</td>
+                                            <td>${valorNetoInicial.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                                            <td>${deduccion.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                                            <td>${valorNetoFinal.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                                            <td className="action-buttons">
+                                                <button className="button-edit" onClick={() => handleEdit(log)}>Editar</button>
+                                                <button className="button-delete" onClick={() => handleDelete(log._id)}>Eliminar</button>
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
                             </tbody>
                         </table>
                     ) : (
