@@ -1,7 +1,7 @@
 # Ignorar carpetas de dependencias y de compilación
 /backend/node_modules
 /frontend/node_modules
-/frontend/build
+
 
 # Ignorar archivos de variables de entorno
 /backend/.env

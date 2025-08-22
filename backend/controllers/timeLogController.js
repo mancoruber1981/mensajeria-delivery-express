@@ -11,7 +11,12 @@ const { generateTimeLogExcelReport } = require('../utils/excelGenerator');
 // Bloque 2: Crear un nuevo registro de horario (Versión Corregida)
 const createTimeLog = asyncHandler(async (req, res) => {
   try {
-    const { employee: employeeId, date, horaInicio, horaFin, festivo, minutosAlmuerzoSinPago, empresa, totalLoanDeducted } = req.body;
+    // Aceptamos los valores calculados desde el frontend
+    const { 
+      employee: employeeId, date, horaInicio, horaFin, festivo, minutosAlmuerzoSinPago, empresa, totalLoanDeducted,
+      horasBrutas, subtotal, valorNeto, valorFinalConDeducciones // <-- Nuevas variables
+    } = req.body;
+
     let { valorHora, descuentoAlmuerzo } = req.body;
     let clientCompany;
     let clientUserForTimeLog;
@@ -59,25 +64,21 @@ const createTimeLog = asyncHandler(async (req, res) => {
     } else {
       valorHora = parseFloat(valorHora);
     }
-
+    
     const targetEmployee = await Employee.findById(employeeId);
     if (!targetEmployee) {
       res.status(404);
       throw new Error('Empleado no encontrado.');
     }
-
-    const start = new Date(`${date}T${horaInicio}`);
-    let end = new Date(`${date}T${horaFin}`);
-    if (end < start) end.setDate(end.getDate() + 1);
-    let diffMs = end - start;
-    const parsedMinutosAlmuerzoSinPago = parseInt(minutosAlmuerzoSinPago, 10) || 0;
-    diffMs -= parsedMinutosAlmuerzoSinPago * 60 * 1000;
-
-    const horasBrutas = parseFloat((diffMs / (1000 * 60 * 60)).toFixed(2));
-    const subtotal = parseFloat((horasBrutas * valorHora).toFixed(2));
-    descuentoAlmuerzo = parseFloat(descuentoAlmuerzo) || 0;
-    const valorNetoInicial = subtotal - descuentoAlmuerzo;
-    const valorNetoFinal = valorNetoInicial - (parseFloat(totalLoanDeducted) || 0);
+    
+    // ❌ Eliminamos la lógica de cálculo aquí, ya no es necesaria
+    // const start = new Date(`${date}T${horaInicio}`);
+    // ...
+    // const horasBrutas = parseFloat((diffMs / (1000 * 60 * 60)).toFixed(2));
+    // const subtotal = parseFloat((horasBrutas * valorHora).toFixed(2));
+    // descuentoAlmuerzo = parseFloat(descuentoAlmuerzo) || 0;
+    // const valorNetoInicial = subtotal - descuentoAlmuerzo;
+    // const valorNetoFinal = valorNetoInicial - (parseFloat(totalLoanDeducted) || 0);
 
     const newTimeLog = await TimeLog.create({
       employee: targetEmployee._id,
@@ -89,12 +90,13 @@ const createTimeLog = asyncHandler(async (req, res) => {
       valorHora,
       festivo,
       descuentoAlmuerzo,
-      minutosAlmuerzoSinPago: parsedMinutosAlmuerzoSinPago,
+      minutosAlmuerzoSinPago: parseInt(minutosAlmuerzoSinPago, 10),
+      // ✅ Usamos los valores exactos enviados desde el frontend
       horasBrutas,
       subtotal,
-      valorNeto: valorNetoInicial,
+      valorNeto, // Este es el valor Neto Inicial
       totalLoanDeducted: parseFloat(totalLoanDeducted) || 0,
-      valorNetoFinal: valorNetoFinal
+      valorNetoFinal: valorFinalConDeducciones
     });
 
     res.status(201).json(newTimeLog);
@@ -150,8 +152,9 @@ const getTimeLogsByEmployeeId = asyncHandler(async (req, res) => {
   console.log("--- DEBUG: getTimeLogsByEmployeeId (Fin) ---");
 });
 
-// Bloque 4: Actualizar un registro de horario
+// Bloque 4: Actualizar un registro de horario (Versión Corregida)
 const updateTimeLog = asyncHandler(async (req, res) => {
+  console.log("Datos recibidos para actualizar:", req.body); // <-- Agrega esta línea
   console.log("--- DEBUG: updateTimeLog (Inicio) ---");
   const authenticatedUser = req.user;
   const userRole = authenticatedUser.role;
@@ -193,67 +196,54 @@ const updateTimeLog = asyncHandler(async (req, res) => {
     throw new Error('No tienes permiso para editar este registro.');
   }
 
-  const { date, horaInicio, horaFin, festivo, minutosAlmuerzoSinPago, empresa, totalLoanDeducted } = req.body;
-  let { valorHora, descuentoAlmuerzo } = req.body;
+    // Aceptamos los valores calculados desde el frontend
+    const { 
+      date, horaInicio, horaFin, festivo, minutosAlmuerzoSinPago, empresa, totalLoanDeducted,
+      horasBrutas, subtotal, valorNeto, valorFinalConDeducciones // <-- Nuevas variables
+    } = req.body;
 
-  if (userRole === 'cliente' || userRole === 'auxiliar') {
-    const clientProfile = userRole === 'cliente'
-      ? await Client.findOne({ user: authenticatedUser._id })
-      : await Client.findById(authenticatedUser.associatedClient);
+    let { valorHora, descuentoAlmuerzo } = req.body;
 
-    if (festivo && clientProfile.holidayHourlyRate > 0) {
-      valorHora = clientProfile.holidayHourlyRate;
-    } else if (clientProfile.defaultHourlyRate > 0) {
-      valorHora = clientProfile.defaultHourlyRate;
+    if (userRole === 'cliente' || userRole === 'auxiliar') {
+      const clientProfile = userRole === 'cliente'
+        ? await Client.findOne({ user: authenticatedUser._id })
+        : await Client.findById(authenticatedUser.associatedClient);
+
+      if (festivo && clientProfile.holidayHourlyRate > 0) {
+        valorHora = clientProfile.holidayHourlyRate;
+      } else if (clientProfile.defaultHourlyRate > 0) {
+        valorHora = clientProfile.defaultHourlyRate;
+      } else {
+        res.status(400);
+        throw new Error('No se ha configurado una tarifa horaria por defecto para este cliente.');
+      }
     } else {
-      res.status(400);
-      throw new Error('No se ha configurado una tarifa horaria por defecto para este cliente.');
+      valorHora = parseFloat(valorHora);
     }
-  } else {
-    valorHora = parseFloat(valorHora);
-  }
 
-  if (date !== undefined) timeLog.date = date;
-  if (horaInicio !== undefined) timeLog.horaInicio = horaInicio;
-  if (horaFin !== undefined) timeLog.horaFin = horaFin;
-  if (valorHora !== undefined) timeLog.valorHora = parseFloat(valorHora);
-  if (festivo !== undefined) timeLog.festivo = festivo;
-  if (minutosAlmuerzoSinPago !== undefined) timeLog.minutosAlmuerzoSinPago = parseInt(minutosAlmuerzoSinPago, 10);
-  if (empresa !== undefined) timeLog.empresa = empresa;
-  if (totalLoanDeducted !== undefined) timeLog.totalLoanDeducted = parseFloat(totalLoanDeducted);
+    // Actualizamos los campos recibidos
+    if (date !== undefined) timeLog.date = date;
+    if (horaInicio !== undefined) timeLog.horaInicio = horaInicio;
+    if (horaFin !== undefined) timeLog.horaFin = horaFin;
+    if (valorHora !== undefined) timeLog.valorHora = parseFloat(valorHora);
+    if (festivo !== undefined) timeLog.festivo = festivo;
+    if (minutosAlmuerzoSinPago !== undefined) timeLog.minutosAlmuerzoSinPago = parseInt(minutosAlmuerzoSinPago, 10);
+    if (empresa !== undefined) timeLog.empresa = empresa;
+    if (totalLoanDeducted !== undefined) timeLog.totalLoanDeducted = parseFloat(totalLoanDeducted);
 
-  const dateStringForCalculation = timeLog.date instanceof Date
-    ? timeLog.date.toISOString().split('T')[0]
-    : timeLog.date;
+    // ✅ Usamos los valores exactos enviados desde el frontend para actualizar
+    if (horasBrutas !== undefined) timeLog.horasBrutas = horasBrutas;
+    if (subtotal !== undefined) timeLog.subtotal = subtotal;
+    if (valorNeto !== undefined) timeLog.valorNeto = valorNeto;
+    if (valorFinalConDeducciones !== undefined) timeLog.valorNetoFinal = valorFinalConDeducciones;
 
-  if (timeLog.horaInicio && timeLog.horaFin) {
-    const start = new Date(`${dateStringForCalculation}T${timeLog.horaInicio}`);
-    let end = new Date(`${dateStringForCalculation}T${timeLog.horaFin}`);
-    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
-      res.status(400);
-      throw new Error('Formato de fecha u hora inválido para el cálculo.');
-    }
-    if (end < start) end.setDate(end.getDate() + 1);
-    let diffMs = end - start;
-    console.log("DEBUG updateTimeLog: timeLog.minutosAlmuerzoSinPago (valor almacenado):", timeLog.minutosAlmuerzoSinPago);
-    console.log("DEBUG updateTimeLog: diffMs antes del descuento (ms):", diffMs);
-    diffMs -= (timeLog.minutosAlmuerzoSinPago || 0) * 60 * 1000;
-    console.log("DEBUG updateTimeLog: diffMs después del descuento (ms):", diffMs);
-    timeLog.horasBrutas = parseFloat((diffMs / (1000 * 60 * 60)).toFixed(2));
-    timeLog.subtotal = parseFloat((timeLog.horasBrutas * (timeLog.valorHora || 0)).toFixed(2));
-    timeLog.descuentoAlmuerzo = parseFloat(descuentoAlmuerzo) || 0;
-    timeLog.valorNeto = timeLog.subtotal - (timeLog.descuentoAlmuerzo || 0);
-    timeLog.valorNetoFinal = timeLog.valorNeto - (timeLog.totalLoanDeducted || 0);
-  } else {
-    timeLog.horasBrutas = 0;
-    timeLog.subtotal = 0;
-    timeLog.valorNeto = 0;
-    timeLog.descuentoAlmuerzo = 0;
-    timeLog.valorNetoFinal = 0;
-  }
+    // ❌ Eliminamos la lógica de recalcular aquí
+    // const dateStringForCalculation = timeLog.date instanceof Date ...
+    // ... y toda la lógica de cálculo
+    // Esto es lo que causaba el problema de redondeo al editar
 
-  const updatedTimeLog = await timeLog.save();
-  res.json(updatedTimeLog);
+    const updatedTimeLog = await timeLog.save();
+    res.json(updatedTimeLog);
 });
 
 // Bloque 5: Resetear registros de horario (para clientes)

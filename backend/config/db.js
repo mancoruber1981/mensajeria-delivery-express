@@ -3,6 +3,7 @@ const dotenv = require('dotenv');
 
 dotenv.config(); // Carga las variables de entorno desde .env
 
+
 const connectDB = async () => {
     try {
         // mongoose.connect() es la función que conecta a MongoDB
