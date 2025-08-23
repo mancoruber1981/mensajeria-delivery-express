@@ -4,7 +4,7 @@
 // Descripción: Permite registrar y gestionar las horas trabajadas por un empleado, incluyendo horas brutas, descuentos, deducciones y cálculo de valor final.
 // ====================
 
-// Bloque 1: Importaciones 
+// Bloque 1: Importaciones
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
@@ -24,13 +24,13 @@ const TimeEntriesPage = () => {
     const isClient = user && user.role === 'cliente';
     const isAdmin = user && user.role === 'admin';
 
-    // Bloque 3: Estados del Componente (se añade el estado de loading)
+    // Bloque 3: Estados del Componente
     const [defaultHourlyRateForClient, setDefaultHourlyRateForClient] = useState('0');
     const [holidayHourlyRateForClient, setHolidayHourlyRateForClient] = useState('0');
     const [employeeName, setEmployeeName] = useState('Cargando...');
     const [timeLogs, setTimeLogs] = useState([]);
     const [editingLog, setEditingLog] = useState(null);
-    const [loading, setLoading] = useState(true); // <-- CORRECCIÓN: Estado de carga añadido
+    const [loading, setLoading] = useState(true);
     const [formData, setFormData] = useState({
         date: new Date().toISOString().split('T')[0],
         horaInicio: '',
@@ -42,38 +42,49 @@ const TimeEntriesPage = () => {
         empresa: '',
         montoPrestamoDeducir: '0'
     });
-    const [horasBrutas, setHorasBrutas] = useState('0:00');
+    // ✅ Renombramos 'horasBrutas' a 'horasNetas' y creamos una nueva para el total
+    const [horasTotales, setHorasTotales] = useState(0); 
     const [subtotal, setSubtotal] = useState(0);
     const [valorNeto, setValorNeto] = useState(0);
     const [valorFinalConDeducciones, setValorFinalConDeducciones] = useState(0);
 
-    // Bloque 6: Función de Recálculo de Totales
+    // Bloque 6: Función de Recálculo de Totales (Lógica Corregida)
     const recalculateTotals = useCallback((data) => {
         const { horaInicio, horaFin, valorHora, descuentoAlmuerzo, minutosAlmuerzoSinPago, montoPrestamoDeducir } = data;
+        
         if (horaInicio && horaFin && valorHora) {
             const start = new Date(`1970-01-01T${horaInicio}:00`);
             let end = new Date(`1970-01-01T${horaFin}:00`);
             if (end < start) end.setDate(end.getDate() + 1);
-            let diffMs = end - start;
-            const minutosSinPagoNum = parseInt(minutosAlmuerzoSinPago, 10) || 0;
+            
+            const totalDiffMs = end - start;
             const valorHoraNum = parseFloat(valorHora) || 0;
-            const almuerzoDescontadoMonetario = (isAuxiliar)
-                ? (minutosSinPagoNum / 60) * valorHoraNum
-                : (parseFloat(descuentoAlmuerzo) || 0);
-            diffMs -= minutosSinPagoNum * 60 * 1000;
-            const totalHours = diffMs / (1000 * 60 * 60);
-            const hours = Math.floor(totalHours);
-            const minutes = Math.round((totalHours - hours) * 60);
-            const sub = totalHours * valorHoraNum;
-            const total = sub - almuerzoDescontadoMonetario;
+            
+            const totalHoursDecimal = totalDiffMs / (1000 * 60 * 60);
+            
+            let almuerzoADescontar = 0;
+            const minutosSinPagoNum = parseInt(minutosAlmuerzoSinPago, 10) || 0;
+
+            if (isAuxiliar) {
+                almuerzoADescontar = (minutosSinPagoNum / 60) * valorHoraNum;
+            } else {
+                almuerzoADescontar = parseFloat(descuentoAlmuerzo) || 0;
+            }
+            
+            const sub = totalHoursDecimal * valorHoraNum;
+            
+            const total = sub - almuerzoADescontar;
+            
             const prestamoADeducir = parseFloat(montoPrestamoDeducir) || 0;
             const finalValue = total - prestamoADeducir;
-            setHorasBrutas(`${hours}:${minutes.toString().padStart(2, '0')}`);
+
+            // ✅ Establecemos las horas totales antes de la deducción de minutos
+            setHorasTotales(totalHoursDecimal); 
             setSubtotal(sub);
             setValorNeto(total);
             setValorFinalConDeducciones(finalValue);
         } else {
-            setHorasBrutas('0:00');
+            setHorasTotales(0);
             setSubtotal(0);
             setValorNeto(0);
             setValorFinalConDeducciones(0);
@@ -83,9 +94,8 @@ const TimeEntriesPage = () => {
     // Bloque 9: Función para Obtener Registros de Tiempo
     const fetchTimeLogs = useCallback(async () => {
         if (!employeeId) return;
-
         try {
-            setLoading(true); // <-- CORRECCIÓN: Iniciar estado de carga
+            setLoading(true);
             const res = await API.get(`/timelogs/employee/${employeeId}`);
             setTimeLogs(res.data);
         } catch (error) {
@@ -94,7 +104,7 @@ const TimeEntriesPage = () => {
             else if (isAuxiliar) navigate('/auxiliar-home');
             else navigate('/login');
         } finally {
-            setLoading(false); // <-- CORRECCIÓN: Finalizar estado de carga
+            setLoading(false);
         }
     }, [employeeId, navigate, isClient, isAuxiliar]);
 
@@ -105,33 +115,23 @@ const TimeEntriesPage = () => {
                 setLoading(false);
                 return;
             }
-
             try {
-                // <-- CORRECCIÓN: Se inician todas las cargas
                 setLoading(true);
-
-                // Cargar nombre del empleado
                 const employeeRes = await API.get(`/employees/${employeeId}`);
                 setEmployeeName(employeeRes.data.fullName);
-
-                // Cargar tarifas del cliente asociado
                 let clientIdToFetch = null;
                 if (isClient && user.profile?._id) {
                     clientIdToFetch = user.profile._id;
                 } else if (isAuxiliar && user.associatedClientProfile?._id) {
                     clientIdToFetch = user.associatedClientProfile._id;
                 }
-
                 if (clientIdToFetch) {
                     const clientRes = await API.get(`/clients/${clientIdToFetch}`);
                     setDefaultHourlyRateForClient(clientRes.data.defaultHourlyRate?.toString() || '0');
                     setHolidayHourlyRateForClient(clientRes.data.holidayHourlyRate?.toString() || '0');
                 }
-
-                // Cargar registros de tiempo
                 const logsRes = await API.get(`/timelogs/employee/${employeeId}`);
                 setTimeLogs(logsRes.data);
-
             } catch (error) {
                 console.error("Error al cargar datos iniciales:", error);
                 toast.error(error.response?.data?.message || "Error al cargar la información inicial.");
@@ -139,10 +139,9 @@ const TimeEntriesPage = () => {
                 else if (isAuxiliar) navigate('/auxiliar-home');
                 else navigate('/login');
             } finally {
-                setLoading(false); // <-- CORRECCIÓN: Finalizar estado de carga
+                setLoading(false);
             }
         };
-
         fetchData();
     }, [employeeId, navigate, isClient, isAuxiliar, user]);
 
@@ -154,18 +153,13 @@ const TimeEntriesPage = () => {
     // Bloque Adicional: Establecer el valor por hora dinámicamente y nombre de empresa
     useEffect(() => {
         if (editingLog) return;
-
-        // Lógica para prellenar el nombre de la empresa
         let clientCompanyName = '';
         if (isClient && user.profile?.companyName) {
             clientCompanyName = user.profile.companyName;
         } else if (isAuxiliar && user.associatedClientProfile?.companyName) {
             clientCompanyName = user.associatedClientProfile.companyName;
         }
-
-        // Lógica para establecer la tarifa por hora
         const rateToApply = formData.festivo ? holidayHourlyRateForClient : defaultHourlyRateForClient;
-
         setFormData(prev => ({
             ...prev,
             empresa: clientCompanyName,
@@ -173,21 +167,17 @@ const TimeEntriesPage = () => {
         }));
     }, [user, isClient, isAuxiliar, editingLog, formData.festivo, defaultHourlyRateForClient, holidayHourlyRateForClient]);
 
-
     // Bloque 8: Efecto para Cargar Datos en Modo Edición
     useEffect(() => {
         if (editingLog) {
-            // ... (Tu lógica existente para cargar datos de edición) ...
             const minutosSinPagoNum = parseInt(editingLog.minutosAlmuerzoSinPago, 10) || 0;
             const valorHoraNum = parseFloat(editingLog.valorHora) || 0;
             const almuerzoDescontadoMonetarioCalculado = (isAuxiliar)
                 ? (minutosSinPagoNum / 60) * valorHoraNum
                 : (parseFloat(editingLog.descuentoAlmuerzo) || 0);
-
             const rateForEdit = (isAuxiliar || isClient)
                 ? (editingLog.festivo ? holidayHourlyRateForClient : defaultHourlyRateForClient)
                 : (editingLog.valorHora?.toString() || '0');
-
             setFormData(prev => ({
                 ...prev,
                 valorHora: rateForEdit,
@@ -228,10 +218,9 @@ const TimeEntriesPage = () => {
         }
     };
 
-    // Bloque 12: Manejador de Envío del Formulario
+    // Bloque 12: Manejador de Envío del Formulario (Ahora envía todos los datos)
     const handleSubmit = async (e) => {
         e.preventDefault();
-
         if (!formData.empresa.trim()) {
             toast.error("Por favor, ingresa el nombre de la empresa/cliente.");
             return;
@@ -254,6 +243,10 @@ const TimeEntriesPage = () => {
             minutosAlmuerzoSinPago: minutosSinPagoNum,
             empresa: formData.empresa.trim(),
             totalLoanDeducted: parseFloat(formData.montoPrestamoDeducir) || 0,
+            // ✅ Envía 'horasTotales' al backend
+            horasBrutas: horasTotales,
+            subtotal: subtotal,
+            valorNeto: valorNeto
         };
 
         try {
@@ -264,8 +257,6 @@ const TimeEntriesPage = () => {
                 await API.post('/timelogs', dataToSend);
                 toast.success('Registro guardado con éxito');
             }
-
-            // Reseteamos el formulario y el estado de edición.
             setFormData({
                 date: new Date().toISOString().split('T')[0],
                 horaInicio: '',
@@ -279,9 +270,7 @@ const TimeEntriesPage = () => {
                 montoPrestamoDeducir: '0'
             });
             setEditingLog(null);
-
             fetchTimeLogs();
-
         } catch (err) {
             console.error("Error en handleSubmit:", err);
             toast.error(err.response?.data?.message || 'Error al guardar.');
@@ -336,7 +325,6 @@ const TimeEntriesPage = () => {
                 <div className="form-container" ref={formRef}>
                     <h3 className="form-header">Registrar Horario para: {employeeName}</h3>
                     <form onSubmit={handleSubmit}>
-                        {/* ... El resto del formulario se mantiene igual ... */}
                         <div className="form-row">
                             <div className="form-group form-group-half">
                                 <label>Fecha:</label>
@@ -418,7 +406,13 @@ const TimeEntriesPage = () => {
                                 <div className="form-row">
                                     <div className="form-group form-group-half">
                                         <label>Horas Brutas:</label>
-                                        <input type="text" value={horasBrutas} readOnly className="read-only-input" />
+                                        <input
+                                            type="text"
+                                            // ✅ Usamos 'horasTotales' para la visualización de las horas brutas
+                                            value={`${Math.floor(horasTotales)}:${Math.round((horasTotales - Math.floor(horasTotales)) * 60).toString().padStart(2, '0')}`}
+                                            readOnly
+                                            className="read-only-input"
+                                        />
                                     </div>
                                     <div className="form-group form-group-half">
                                         <label>Subtotal ($):</label>
@@ -446,7 +440,6 @@ const TimeEntriesPage = () => {
             {/* Bloque 15: Historial de Registros */}
             <div className="dashboard-card" style={{ marginTop: '2rem' }}>
                 <h3>Historial de Registros</h3>
-                {/* <-- CORRECCIÓN: Se usa el estado de 'loading' para mostrar el historial */}
                 {loading ? (
                     <p>Cargando registros...</p>
                 ) : timeLogs.length > 0 ? (
@@ -476,7 +469,10 @@ const TimeEntriesPage = () => {
                                         <td>{log.empresa || 'N/A'}</td>
                                         <td>{log.horaInicio}</td>
                                         <td>{log.horaFin}</td>
-                                        <td>{log.horasBrutas}</td>
+                                        {/* ✅ Formato para mostrar el valor numérico como HH:mm */}
+                                        <td>
+                                            {log.horasBrutas ? `${Math.floor(log.horasBrutas)}:${Math.round((log.horasBrutas - Math.floor(log.horasBrutas)) * 60).toString().padStart(2, '0')}` : 'N/A'}
+                                        </td>
                                         {!(isAuxiliar) && (
                                             <>
                                                 <td>${(log.valorNeto || 0).toLocaleString('es-CO')}</td>
