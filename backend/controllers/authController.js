@@ -103,18 +103,26 @@ const registerUser = asyncHandler(async (req, res) => {
         throw new Error('Datos de usuario inválidos.');
     }
 });
-// Función para loguear un usuario (MODIFICADA)
+// Función para loguear un usuario (VERSIÓN FINAL CORREGIDA)
 const loginUser = asyncHandler(async (req, res) => {
+    // Recibimos los datos del formulario (el campo puede llamarse 'username' pero contener un email)
     const { username, password } = req.body;
-    const user = await User.findOne({ username });
+
+    // Buscamos en la base de datos un usuario donde el EMAIL o el USERNAME coincidan
+    const user = await User.findOne({ 
+        $or: [{ email: username }, { username: username }] 
+    });
+
+    // Si encontramos un usuario Y la contraseña coincide...
     if (user && (await user.matchPassword(password))) {
-        // --- AÑADIR VERIFICACIÓN DE ESTADO ---
+        
+        // Verificamos que su cuenta esté activa
         if (user.status !== 'activo') {
-            res.status(401); // Unauthorized
+            res.status(401);
             throw new Error(`Tu cuenta está en estado '${user.status}'. No puedes iniciar sesión.`);
         }
-        // ------------------------------------
-        // El resto de la lógica para buscar el perfil y generar el token se mantiene igual.
+
+        // Si todo es correcto, generamos el token y enviamos los datos
         let profileData = null;
         if (user.profile) {
             if (user.role === 'repartidor') {
@@ -127,12 +135,14 @@ const loginUser = asyncHandler(async (req, res) => {
             _id: user._id,
             username: user.username,
             role: user.role,
-            status: user.status, // Es buena idea enviar el status
+            status: user.status,
             profile: profileData,
             associatedClient: user.associatedClient,
             token: generateToken(user._id),
         });
+
     } else {
+        // Si no se encuentra el usuario o la contraseña no coincide, enviamos el error
         res.status(401).json({ message: 'Usuario o contraseña inválidos' });
     }
 });
@@ -262,9 +272,11 @@ const addNoteToUserProfile = asyncHandler(async (req, res) => {
     const updatedProfile = await profile.save();
     res.json({ message: 'Nota añadida al perfil con éxito.', profile: updatedProfile });
 });
-// Un cliente registra a uno de sus auxiliares
+// Un cliente registra a uno de sus auxiliares (VERSIÓN FINAL SIN EMAIL)
 const registerAuxiliaryByClient = asyncHandler(async (req, res) => {
-    const { username, password } = req.body;
+    // Solo recibimos username y password
+    const { username, password } = req.body; 
+
     if (req.user.role !== 'cliente') {
         res.status(403);
         throw new Error('Solo los clientes pueden registrar auxiliares.');
@@ -274,17 +286,22 @@ const registerAuxiliaryByClient = asyncHandler(async (req, res) => {
         res.status(404);
         throw new Error('Perfil de cliente no encontrado para asociar el auxiliar.');
     }
+
     const userExists = await User.findOne({ username });
     if (userExists) {
         res.status(400);
         throw new Error('El nombre de usuario ya existe. Por favor, elige otro.');
     }
+
+    // Creamos el usuario SIN el campo email
     const newAuxiliaryUser = await User.create({
         username,
         password,
         role: 'auxiliar',
         associatedClient: clientProfile._id,
+        status: 'activo'
     });
+
     if (newAuxiliaryUser) {
         res.status(201).json({
             message: 'Auxiliar registrado y asociado con éxito.',

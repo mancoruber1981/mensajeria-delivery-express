@@ -62,7 +62,7 @@ const AuxiliarDashboardPage = () => {
 
     return (
     <div className="dashboard-container">
-        <h1>Bienvenido, Auxiliar {user?.username}!</h1>
+        <h1>¡Bienvenido, Auxiliar {user?.username}!</h1>
         {user.associatedClientProfile?.companyName && (
             <p>Gestionando mensajeros de la empresa: <strong>{user.associatedClientProfile.companyName}</strong></p>
         )}
@@ -77,9 +77,11 @@ const AuxiliarDashboardPage = () => {
         <div className="dashboard-card">
             <h2>Mensajeros de {user.associatedClientProfile?.companyName || 'tu Cliente'}</h2>
             {employees.length > 0 ? (
-                // --- INICIA LA MODIFICACIÓN ---
-                <div className="table-responsive-wrapper">
-                    <table>
+                // =================================================================
+                // ===== INICIO DE LA CORRECCIÓN ===================================
+                // =================================================================
+                <div className="table-responsive-container"> {/* <-- CORRECCIÓN 1: Nombre de clase correcto */}
+                    <table className="responsive-table"> {/* <-- CORRECCIÓN 2: Clase añadida a la tabla */}
                         <thead>
                             <tr>
                                 <th>Nombre Completo</th>
@@ -96,7 +98,7 @@ const AuxiliarDashboardPage = () => {
                                     <td>{employee.phone}</td>
                                     <td>
                                         <button
-                                            className="button-small button-primary"
+                                            className="button-small" // Clase más genérica para el botón
                                             onClick={() => handleManageTimeEntries(employee._id)}
                                         >
                                             Gestionar Horario
@@ -107,7 +109,9 @@ const AuxiliarDashboardPage = () => {
                         </tbody>
                     </table>
                 </div>
-                // --- TERMINA LA MODIFICACIÓN ---
+                // =================================================================
+                // ===== FIN DE LA CORRECCIÓN ======================================
+                // =================================================================
             ) : (
                 <p style={{ marginTop: '1.5rem' }}>Tu cliente aún no tiene mensajeros registrados.</p>
             )}
