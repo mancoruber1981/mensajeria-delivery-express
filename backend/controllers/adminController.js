@@ -18,14 +18,16 @@ const getDashboardStats = asyncHandler(async (req, res) => {
             { $lookup: { from: 'employees', localField: 'employee', foreignField: '_id', as: 'employeeInfo' } },
             { $unwind: '$employeeInfo' },
             { $match: { 'employeeInfo.employeeType': 'cliente' } },
-            { $group: { _id: null, total: { $sum: '$valorNetoFinal' } } }
+            // CORRECCIÓN: Se cambió '$valorNetoFinal' por '$valorNeto' para que coincida con el modelo de datos.
+            { $group: { _id: null, total: { $sum: '$valorNeto' } } } 
         ]);
 
         const totalAPagarPromise = TimeLog.aggregate([
             { $lookup: { from: 'employees', localField: 'employee', foreignField: '_id', as: 'employeeInfo' } },
             { $unwind: '$employeeInfo' },
             { $match: { 'employeeInfo.role': 'repartidor' } },
-            { $group: { _id: null, total: { $sum: '$valorNetoFinal' } } }
+             // CORRECCIÓN: Se cambió '$valorNetoFinal' por '$valorNeto' para que coincida con el modelo de datos.
+            { $group: { _id: null, total: { $sum: '$valorNeto' } } }
         ]);
 
         const [cobrarRes, pagarRes] = await Promise.all([totalACobrarPromise, totalAPagarPromise]);
