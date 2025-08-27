@@ -142,6 +142,8 @@ const registerEmployee = asyncHandler(async (req, res) => {
     }
 });
 
+// En backend/controllers/adminController.js
+
 const getClientDashboardById = asyncHandler(async (req, res) => {
     const { clientId } = req.params;
     if (!mongoose.Types.ObjectId.isValid(clientId)) {
@@ -162,10 +164,15 @@ const getClientDashboardById = asyncHandler(async (req, res) => {
             auxiliaries: auxiliaries
         });
     }
+
+    // --- INICIO DE LA CORRECCIÓN FINAL ---
     const paymentTotals = await TimeLog.aggregate([
         { $match: { employee: { $in: employeeIds } } },
-        { $group: { _id: '$employee', totalAPagar: { $sum: '$valorNetoFinal' } } }
+        // Se cambió '$valorNetoFinal' por el campo correcto '$valorNeto'
+        { $group: { _id: '$employee', totalAPagar: { $sum: '$valorNeto' } } } 
     ]);
+    // --- FIN DE LA CORRECCIÓN FINAL ---
+
     const totalsMap = paymentTotals.reduce((acc, { _id, totalAPagar }) => {
         acc[_id.toString()] = totalAPagar;
         return acc;

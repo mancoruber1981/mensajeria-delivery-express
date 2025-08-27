@@ -1,17 +1,12 @@
+// ./config/db.js
 const mongoose = require('mongoose');
-const dotenv = require('dotenv');
 
-dotenv.config(); // Carga las variables de entorno desde .env
-
-
-const connectDB = async () => {
+const connectDB = async (uri) => { // Acepta la URI como un parámetro
     try {
-        // mongoose.connect() es la función que conecta a MongoDB
-        const conn = await mongoose.connect(process.env.MONGO_URI);
+        const conn = await mongoose.connect(uri); // Utiliza el parámetro uri
         console.log(`MongoDB Conectado: ${conn.connection.host}`);
     } catch (error) {
         console.error(`Error: ${error.message}`);
-        // Si hay un error de conexión, el proceso Node.js debe salir
         process.exit(1);
     }
 };

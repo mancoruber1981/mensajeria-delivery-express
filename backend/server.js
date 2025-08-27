@@ -1,12 +1,10 @@
-// server.js
+// server.js (Versión Final y Limpia)
+
+require('dotenv').config();
 const express = require('express');
-const dotenv = require('dotenv');
 const connectDB = require('./config/db');
 const path = require('path');
 const cors = require('cors');
-
-// Cargar variables de entorno
-dotenv.config();
 
 // Importar rutas
 const authRoutes = require('./routes/auth');
@@ -19,10 +17,9 @@ const adminRoutes = require('./routes/adminRoutes');
 
 const app = express();
 
-// 🚀 Capturar errores globales no manejados
+// Capturar errores globales no manejados
 process.on('unhandledRejection', (reason, promise) => {
     console.error('🔥 SERVER CRASH - UNHANDLED REJECTION:', reason);
-    console.error('Promesa rechazada:', promise);
 });
 
 process.on('uncaughtException', (err) => {
@@ -44,7 +41,7 @@ app.use(express.urlencoded({ extended: false }));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // 4. Conectar a MongoDB
-connectDB();
+connectDB(process.env.MONGO_URI); // <-- Lógica correcta de conexión
 
 // 5. Rutas API
 app.use('/api/auth', authRoutes);
