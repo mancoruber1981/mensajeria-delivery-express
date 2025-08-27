@@ -1,4 +1,4 @@
-/* frontend/src/pages/ContadorPage.css */
+/* frontend/src/pages/ContadorPage.css (CORREGIDO) */
 
 .contador-page-container {
     max-width: 1200px;
@@ -62,15 +62,24 @@
     background-color: #157347;
 }
 
+/* ============================================== */
+/* ========= INICIO DE LA CORRECCIÓN ============ */
+/* ============================================== */
 .summary-totals {
     display: flex;
-    justify-content: space-around;
+    justify-content: flex-start; /* Cambiado para alinear al inicio */
+    gap: 2rem; /* Espacio fijo entre elementos */
     text-align: center;
     padding: 1.5rem;
     background-color: #f8f9fa;
     border-radius: 8px;
     margin-bottom: 2rem;
+    overflow-x: auto; /* <-- LA LÍNEA MÁGICA para el scroll */
+    white-space: nowrap; /* <-- Evita que el texto se parta en varias líneas */
 }
+/* ============================================== */
+/* =========== FIN DE LA CORRECCIÓN ============= */
+/* ============================================== */
 
 .summary-totals p {
     margin: 0;
