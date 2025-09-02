@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import API from '../api/api';
 import * as XLSX from 'xlsx-js-style';
 import { saveAs } from 'file-saver';
-import './ContadorPage.css'; // Importamos el archivo CSS para usar las clases
+import './ContadorPage.css';
 
 function ContadorPage() {
     // Estados de la página
@@ -16,7 +16,7 @@ function ContadorPage() {
     const [error, setError] = useState(null);
 
     // Función para generar el reporte
-    const handleGenerateReport = async () => {
+    const handleGenerateReport = useCallback(async () => {
         if (!startDate || !endDate) {
             setError("Por favor, selecciona un rango de fechas.");
             return;
@@ -30,7 +30,6 @@ function ContadorPage() {
                 `/admin/accountant-report?startDate=${startDate}&endDate=${endDate}`
             );
             
-            // Extraemos las propiedades que necesitamos directamente de la respuesta del servidor.
             const { transactions, totalIncome, totalExpense, finalBalance } = response.data;
             
             setTransactions(transactions);
@@ -45,14 +44,14 @@ function ContadorPage() {
         } finally {
             setLoading(false);
         }
-    };
-    
+    }, [startDate, endDate]); // Dependencies for useCallback
+
     // useEffect para cargar el reporte al abrir la página y al cambiar las fechas
     useEffect(() => {
         if (startDate && endDate) {
             handleGenerateReport();
         }
-    }, [startDate, endDate]);
+    }, [startDate, endDate, handleGenerateReport]);
 
     // Función para exportar a Excel
     const handleExportExcel = () => {
