@@ -60,48 +60,42 @@ const createEmployeeByClient = asyncHandler(async (req, res) => {
     }
     
     try {
-        // --- INICIO DE LA CORRECCIÓN ---
-        // PASO 1: Encontrar el perfil del cliente, sin importar si la petición la hace un 'cliente' o un 'auxiliar'.
         let clientProfile;
         if (req.user.role === 'cliente') {
             clientProfile = await Client.findOne({ user: req.user.id }).populate('employees');
         } else if (req.user.role === 'auxiliar') {
-            // Para el auxiliar, buscamos el cliente a través de su campo 'associatedClient'
             clientProfile = await Client.findById(req.user.associatedClient).populate('employees');
         }
 
-        // Si por alguna razón no se encuentra un perfil de cliente, detenemos la ejecución.
         if (!clientProfile) {
             res.status(404);
             throw new Error('No se encontró un perfil de cliente asociado para realizar esta acción.');
         }
-        // A partir de aquí, 'clientProfile' nunca será null.
-        // --- FIN DE LA CORRECCIÓN ---
-
-
-        // PASO 2: Continuamos con la lógica que ya teníamos, usando el clientProfile que encontramos.
+        
         const employeeExists = clientProfile.employees.some(emp => emp.idCard === idCard);
         if (employeeExists) {
             res.status(400);
             throw new Error('Ya has registrado un empleado con esa cédula.');
         }
 
-        // Creamos solo el perfil del Empleado, sin un Usuario para iniciar sesión.
+        // === INICIO DE LA CORRECCIÓN ===
+        // Aquí debes incluir el 'user' ID del cliente en el nuevo perfil de empleado
         const employee = await Employee.create({
             fullName,
             idCard,
             phone,
             role: 'empleado',
-            employeeType: 'cliente'
+            employeeType: 'cliente',
+            user: req.user.id, // <-- Esta es la línea que falta
         });
+        // === FIN DE LA CORRECCIÓN ===
 
-        // Asociamos el nuevo empleado al perfil del cliente.
         clientProfile.employees.push(employee._id);
         await clientProfile.save();
         res.status(201).json({ message: 'Empleado registrado y asociado con éxito.', employee });
 
     } catch (err) {
-        console.error("Error en createEmployeeByClient:", err); // Log para depuración
+        console.error("Error en createEmployeeByClient:", err);
         res.status(500);
         throw new Error('Error interno al crear el perfil del empleado.');
     }
