@@ -151,72 +151,49 @@
          navigate('/login'); 
      }, [navigate]); // <-- CAMBIO #2 APLICADO 
 
-     // Bloque 8 
-     useEffect(() => { 
-         const loadUserFromToken = async () => { 
-             setIsLoading(true); 
-             const storedToken = localStorage.getItem('token'); 
-             console.log("DEBUG: Token en localStorage al cargar:", storedToken ? "Presente" : "No hay token en localStorage."); 
+     // Bloque 8: Cargar usuario desde token en localStorage
+useEffect(() => {
+    const loadUserFromToken = async () => {
+        setIsLoading(true);
+        const storedToken = localStorage.getItem('token');
 
-             if (storedToken) { 
-                 setToken(storedToken); 
-                 API.defaults.headers.common['Authorization'] = `Bearer ${storedToken}`; 
-                 try { 
-                     console.log("DEBUG: Intentando obtener perfil de usuario desde /auth/me/profile"); 
-                     const res = await API.get('/auth/me/profile'); 
+        if (storedToken) {
+            setToken(storedToken);
+            API.defaults.headers.common['Authorization'] = `Bearer ${storedToken}`;
+            try {
+                const res = await API.get('/auth/me/profile');
+                const finalUserData = {
+                    _id: res.data._id,
+                    username: res.data.username,
+                    role: res.data.role,
+                    profile: res.data.profile,
+                    associatedClient: res.data.associatedClient,
+                };
 
-                     let finalUserData = { 
-                         _id: res.data._id, 
-                         username: res.data.username, 
-                         role: res.data.role, 
-                         profile: res.data.profile, 
-                         associatedClient: res.data.associatedClient, 
-                     }; 
+                if (finalUserData.profile && finalUserData.role === 'cliente') {
+                    const clientRes = await API.get(`/clients/${finalUserData.profile._id}`);
+                    finalUserData.clientProfile = clientRes.data;
+                }
 
-                     if (finalUserData.profile && finalUserData.role === 'cliente') { 
-                         try { 
-                             const clientRes = await API.get(`/clients/${finalUserData.profile._id}`); 
-                             finalUserData.clientProfile = clientRes.data; 
-                         } catch (clientErr) { 
-                             console.warn("No se pudo cargar el perfil del cliente:", clientErr.message); 
-                             finalUserData.clientProfile = null; 
-                         } 
-                     } 
+                if (finalUserData.role === 'auxiliar' && finalUserData.associatedClient) {
+                    const clientRes = await API.get(`/clients/${finalUserData.associatedClient}`);
+                    finalUserData.associatedClientProfile = clientRes.data;
+                }
 
-                     if (finalUserData.role === 'auxiliar' && finalUserData.associatedClient) { 
-                         try { 
-                             console.log("DEBUG: Auxiliar detectado con associatedClient. Cargando perfil del cliente asociado."); 
-                             const clientRes = await API.get(`/clients/${finalUserData.associatedClient}`); 
-                              
-                             // 🚀 NUEVOS LOGS AQUÍ 🚀 
-                             console.log("DEBUG AUTH: Respuesta completa de clientRes:", clientRes); 
-                             console.log("DEBUG AUTH: Datos del cliente asociado (clientRes.data):", clientRes.data); 
-                             // 🚀 FIN NUEVOS LOGS 🚀 
-
-                             finalUserData.associatedClientProfile = clientRes.data; 
-                         } catch (clientErr) { 
-                             console.warn("No se pudo cargar el perfil del cliente asociado para el auxiliar al cargar:", clientErr.message); 
-                             finalUserData.associatedClientProfile = null; 
-                         } 
-                     } 
-
-                     setUser(finalUserData); 
-                     console.log("DEBUG: Perfil de usuario obtenido:", finalUserData); 
-                 } catch (error) {
-                     console.error("DEBUG: Error al cargar usuario desde token:", error.message); 
-
-                     // ➡️ CAMBIO CLAVE AQUÍ: Si falla la validación, siempre hacemos logout
-                console.warn("DEBUG: Token inválido o expirado. Cerrando sesión...");
-                logout(); // ⬅️ Se llama a la función logout
+                setUser(finalUserData);
+            } catch (error) {
+                // ✅ CAMBIO CLAVE: Si la llamada falla, borramos el token y cerramos la sesión
+                console.error("DEBUG: Error al cargar usuario desde token. Token inválido o expirado.");
+                logout();
             }
         } else {
-            setUser(null); 
-             } 
-             setIsLoading(false); 
-         }; 
+            setUser(null);
+        }
+        setIsLoading(false);
+    };
 
-         loadUserFromToken(); 
-     }, [logout]); // <-- CAMBIO #3 APLICADO. ESTA ES LA CORRECCIÓN MÁS IMPORTANTE. 
+    loadUserFromToken();
+}, [logout]); 
 
      // Bloque 9 
      return ( 

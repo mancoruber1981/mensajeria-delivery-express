@@ -1,3 +1,4 @@
+
 /* Estilos para el contenedor de la página */
 .time-entry-page-wrapper {
   padding: 1rem;
@@ -51,4 +52,29 @@
     .time-entry-form-wrapper .form-group-half {
         flex: 1 1 100%;
     }
+}
+/* Estilo para el botón de "Pagado" */
+.btn-pagado {
+    background-color: #080b08;
+    color: rgb(2, 3, 3);
+    border: none;
+    padding: 8px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: background-color 0.3s ease;
+}
+
+.btn-pagado:hover {
+    background-color: #111511;
+}
+.paid-label {
+    display: inline-block;
+    padding: 5px 10px;
+    background-color: #3008e1; /* Color verde de éxito */
+    color: white;
+    font-weight: bold;
+    border-radius: 5px;
+    font-size: 0.8em;
+    text-transform: uppercase;
 }

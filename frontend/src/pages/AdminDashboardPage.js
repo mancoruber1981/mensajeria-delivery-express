@@ -66,6 +66,26 @@ const AdminDashboardPage = () => {
 
         fetchData();
     }, [user, navigate]);
+
+    const handleSettleFortnight = async () => {
+    // 1. Muestra una advertencia clara antes de continuar
+    if (window.confirm('¡ADVERTENCIA!\n\nEsta acción marcará como pagados TODOS los registros pendientes de la última quincena. Este proceso no se puede deshacer.\n\n¿Estás seguro de que deseas continuar?')) {
+        try {
+            toast.info('Procesando liquidación, por favor espera...');
+            
+            // 2. Llama a la ruta del backend que creamos
+            const { data } = await API.post('/admin/settle-fortnight');
+            
+            toast.success(data.message);
+            
+            // 3. Refresca la página para que veas los totales actualizados en el dashboard
+            window.location.reload(); 
+        } catch (err) {
+            toast.error(err.response?.data?.message || 'Error al procesar la liquidación.');
+        }
+    }
+};
+    
     
     // Renderizado condicional basado en el estado de carga y error
     if (loading) {
@@ -123,6 +143,16 @@ const AdminDashboardPage = () => {
                 <Link to="/accountant-report" className="btn btn-success">
                     Reporte Financiero
                 </Link>
+            </div>
+        {/* Puedes crear una nueva sección para acciones más importantes */}
+            <h2 style={{ marginTop: '2rem' }}>Acciones Administrativas</h2>
+            <div className="navigation-buttons">
+                {/* ================================================================= */}
+                {/* ✅ PASO 2: AGREGA EL NUEVO BOTÓN AQUÍ                          */}
+                {/* ================================================================= */}
+                <button onClick={handleSettleFortnight} className="btn btn-danger">
+                    Liquidar Última Quincena
+                </button>
             </div>
         </div>
     );

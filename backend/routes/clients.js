@@ -42,18 +42,19 @@ router.route('/:id').get(protect, authorizeRoles('admin', 'auxiliar', 'cliente')
 // @route   PUT /api/clients/:id/hourly-rates
 // @desc    Actualizar las tarifas horarias (por defecto y festiva) de un cliente
 // @access  Private (Cliente, Admin)
-router.route('/:id/hourly-rates').put(protect, authorizeRoles('cliente', 'admin'), updateClientHourlyRate); // <-- ¡AÑADIR ESTA NUEVA RUTA!
-
+// En backend/routes/clients.js
+router.route('/:id/hourly-rates').put(protect, authorizeRoles('cliente', 'admin'), updateClientHourlyRate);
 // @route   GET /api/clients/me/export-timelogs
 // @desc    Exportar registros de tiempo del cliente a Excel
 // @access  Private (Cliente)
-router.route('/me/export-timelogs').get(protect, authorizeRoles('cliente'), exportClientTimeLogsToExcel);
+// @desc    Exportar registros de tiempo del cliente a Excel
+router.route('/me/export-timelogs').get(protect, authorizeRoles('cliente', 'admin'), exportClientTimeLogsToExcel);
 
-// Bloque 4: Nueva Ruta: Obtener auxiliares de un cliente
-// @route   GET /api/clients/me/auxiliaries
 // @desc    Obtener todos los auxiliares asociados a un cliente
-// @access  Private (Cliente)
-router.route('/me/auxiliaries').get(protect, authorizeRoles('cliente'), getClientAuxiliaries); // <-- ¡AÑADIDA!
+router.get('/:clientId/export', protect, authorizeRoles('admin', 'cliente'), exportClientTimeLogsToExcel);
+
+// ✅ AGREGA ESTA NUEVA RUTA
+router.route('/me/auxiliaries').get(protect, authorizeRoles('cliente'), getClientAuxiliaries);
 
 // Bloque 5: Exportación del Router
 module.exports = router;

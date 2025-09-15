@@ -28,54 +28,40 @@ const RegisterEmployeePage = () => {
 
     // Bloque 4: Función para manejar el envío del formulario (VERSIÓN INTELIGENTE)
     const handleSubmit = async (e) => {
-        e.preventDefault();
-        setLoading(true);
-        setError('');
+    e.preventDefault();
+    setLoading(true);
+    setError('');
 
-        const employeeData = { fullName, idCard, phone, };
+    const employeeData = { fullName, idCard, phone };
 
-        try {
-            let successMessage = '¡Mensajero registrado con éxito!';
-            
-            // --- LÓGICA CONDICIONAL ---
-            if (isAdminView) {
-                // Si es un admin, llamamos a una ruta específica para administradores
-                // y le pasamos el clientId para que el backend sepa a quién asociar el empleado.
-                // NOTA: Debes crear esta ruta en tu backend.
-                await API.post('/admin/register-employee-for-client', { ...employeeData, clientId });
-                toast.success(successMessage);
-                // Navegamos de vuelta al dashboard del cliente que estábamos viendo
-                navigate(`/admin/view-client-dashboard/${clientId}`);
-            } else {
-                // Si es un cliente, usamos la ruta original
-                await API.post('/employees/register-by-client', employeeData);
-                toast.success(successMessage);
-                // Navegamos a nuestro propio dashboard
-                navigate('/dashboard-cliente');
-            }
-            // --------------------------
+    // ✅ LÍNEA CLAVE AÑADIDA: Si es un admin, añade el clientId a los datos a enviar
+    if (isAdminView) {
+        employeeData.clientId = clientId;
+    }
 
-        } catch (err) {
-            // Bloque 5: Manejo de errores (sin cambios)
-            const errorMessage = err.response?.data?.message || 'Error al registrar el mensajero.';
-            setError(errorMessage);
-            toast.error(errorMessage);
-        } finally {
-            // Bloque 6: Finalización de la operación (sin cambios)
-            setLoading(false);
+    try {
+        await API.post('/employees/register-by-client', employeeData);
+        
+        toast.success('¡Mensajero registrado con éxito!');
+
+        if (isAdminView) {
+            navigate(`/admin/view-client-dashboard/${clientId}`);
+        } else {
+            navigate('/dashboard-cliente');
         }
-    };
-
-    // Permitimos el acceso si es un admin, un cliente, O un auxiliar.
-if (!isAdminView && user?.role !== 'cliente' && user?.role !== 'auxiliar') {
-    return <div className="error-message">Acceso denegado.</div>;
-}
-
+    } catch (err) {
+        const errorMessage = err.response?.data?.message || 'Error al registrar el mensajero.';
+        setError(errorMessage);
+        toast.error(errorMessage);
+    } finally {
+        setLoading(false);
+    }
+};
     // Bloque 7: Renderizado del componente JSX (sin cambios en la estructura)
     return (
         <div className="form-container"> 
             <h2>Registrar Nuevo Mensajero</h2>
-            <p>Ingresa los datos del mensajero. El sistema creará sus credenciales de acceso automáticamente (Usuario: Cédula, Contraseña: Cédula).</p>
+            <p>Ingresa los datos del mensajero.</p>
             <form onSubmit={handleSubmit}>
                 <div className="form-group">
                     <label>Nombre Completo:</label>

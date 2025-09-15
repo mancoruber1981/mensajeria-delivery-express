@@ -274,76 +274,60 @@ const addNoteToUserProfile = asyncHandler(async (req, res) => {
 });
 // Un cliente registra a uno de sus auxiliares (VERSIÓN FINAL SIN EMAIL)
 const registerAuxiliaryByClient = asyncHandler(async (req, res) => {
-    // Solo recibimos username y password
-    const { username, password } = req.body; 
+    const { username, password } = req.body;
+    const clientUser = req.user; // El cliente que está logueado
 
-    if (req.user.role !== 'cliente') {
-        res.status(403);
-        throw new Error('Solo los clientes pueden registrar auxiliares.');
-    }
-    const clientProfile = await Client.findOne({ user: req.user.id });
-    if (!clientProfile) {
-        res.status(404);
-        throw new Error('Perfil de cliente no encontrado para asociar el auxiliar.');
+    if (!username || !password) {
+        res.status(400);
+        throw new Error('Por favor, proporciona usuario y contraseña.');
     }
 
     const userExists = await User.findOne({ username });
     if (userExists) {
         res.status(400);
-        throw new Error('El nombre de usuario ya existe. Por favor, elige otro.');
+        throw new Error('El nombre de usuario ya existe.');
     }
 
-    // Creamos el usuario SIN el campo email
-    const newAuxiliaryUser = await User.create({
+    const user = await User.create({
         username,
-        password,
+        password, // El modelo se encargará del hashing
         role: 'auxiliar',
-        associatedClient: clientProfile._id,
-        status: 'activo'
+        status: 'activo', // Se crea como activo directamente
+        associatedClient: clientUser.profile // Asocia al auxiliar con el perfil del cliente
     });
 
-    if (newAuxiliaryUser) {
+    if (user) {
         res.status(201).json({
-            message: 'Auxiliar registrado y asociado con éxito.',
-            auxiliary: {
-                _id: newAuxiliaryUser._id,
-                username: newAuxiliaryUser.username,
-                role: newAuxiliaryUser.role,
-                associatedClient: newAuxiliaryUser.associatedClient,
-            },
+            _id: user._id,
+            username: user.username,
+            role: user.role,
+            message: 'Auxiliar registrado con éxito.'
         });
     } else {
         res.status(400);
-        throw new Error('No se pudo registrar el auxiliar.');
+        throw new Error('Datos de usuario inválidos.');
     }
 });
 // Un cliente elimina a uno de sus auxiliares asociados
 const deleteAuxiliary = asyncHandler(async (req, res) => {
-    const auxiliaryIdToDelete = req.params.id;
-    if (req.user.role !== 'cliente') {
-        res.status(403);
-        throw new Error('Solo los clientes pueden eliminar auxiliares.');
-    }
-    const clientProfile = await Client.findOne({ user: req.user.id });
-    if (!clientProfile) {
-        res.status(404);
-        throw new Error('Perfil de cliente no encontrado.');
-    }
-    const auxiliaryUser = await User.findById(auxiliaryIdToDelete);
-    if (!auxiliaryUser) {
+    const { auxiliaryId } = req.params; // El ID del auxiliar a borrar
+    const clientUser = req.user; // El cliente que está haciendo la petición
+
+    const auxiliary = await User.findById(auxiliaryId);
+
+    if (!auxiliary || auxiliary.role !== 'auxiliar') {
         res.status(404);
         throw new Error('Auxiliar no encontrado.');
     }
-    if (auxiliaryUser.role !== 'auxiliar') {
-        res.status(400);
-        throw new Error('Solo se pueden eliminar usuarios con rol "auxiliar" a través de esta ruta.');
-    }
-    if (!auxiliaryUser.associatedClient || auxiliaryUser.associatedClient.toString() !== clientProfile._id.toString()) {
+
+    // Medida de seguridad: Asegura que un cliente solo pueda borrar SUS PROPIOS auxiliares
+    if (!auxiliary.associatedClient || auxiliary.associatedClient.toString() !== clientUser.profile.toString()) {
         res.status(403);
-        throw new Error('No tienes permiso para eliminar este auxiliar (no está asociado a tu cuenta).');
+        throw new Error('No tienes permiso para eliminar a este auxiliar.');
     }
-    await auxiliaryUser.deleteOne();
-    res.json({ message: 'Auxiliar eliminado con éxito.' });
+
+    await auxiliary.deleteOne();
+    res.status(200).json({ message: 'Auxiliar eliminado con éxito.' });
 });
 module.exports = {
     registerUser,

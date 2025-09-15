@@ -11,18 +11,30 @@ const mongoose = require('mongoose');
 // Bloque 1: Obtener la lista de todos los clientes
 const getClients = asyncHandler(async (req, res) => {
     const clients = await Client.find({}).populate('user', 'username').populate('employees');
+
     const clientsWithTotals = await Promise.all(clients.map(async (client) => {
         if (!client.employees || client.employees.length === 0) {
             return { ...client.toObject(), totalACobrar: 0 };
         }
+        
         const employeeIds = client.employees.map(emp => emp._id);
+
+        // ✅ LÓGICA CORREGIDA: Se añade el filtro isPaid: false
         const logs = await TimeLog.aggregate([
-            { $match: { employee: { $in: employeeIds } } },
-            { $group: { _id: null, totalReceivables: { $sum: '$valorNeto' } } }
+            { $match: { 
+                employee: { $in: employeeIds }, 
+                isPaid: false // <-- Suma solo los registros pendientes de liquidación
+            }},
+            { $group: { 
+                _id: null, 
+                totalReceivables: { $sum: '$valorNetoFinal' } // Se usa valorNetoFinal para consistencia
+            }}
         ]);
+
         const totalACobrar = logs.length > 0 ? logs[0].totalReceivables : 0;
         return { ...client.toObject(), totalACobrar };
     }));
+    
     res.json(clientsWithTotals);
 });
 
@@ -42,83 +54,53 @@ const getClientById = asyncHandler(async (req, res) => {
     res.status(200).json(client);
 });
 
-// Bloque 3: Actualizar tarifas horarias
 const updateClientHourlyRate = asyncHandler(async (req, res) => {
     const { defaultHourlyRate, holidayHourlyRate } = req.body;
-    const client = await Client.findOne({ user: req.user.id });
-    if (!client) {
-        res.status(404);
-        throw new Error('Cliente no encontrado');
-    }
-    client.defaultHourlyRate = defaultHourlyRate || client.defaultHourlyRate;
-    client.holidayHourlyRate = holidayHourlyRate || client.holidayHourlyRate;
+    // La ruta debe ser /:id/hourly-rates
+    const client = await Client.findById(req.params.id);
+    if (!client) { throw new Error('Cliente no encontrado'); }
+    client.defaultHourlyRate = defaultHourlyRate;
+    client.holidayHourlyRate = holidayHourlyRate;
     const updatedClient = await client.save();
     res.json(updatedClient);
 });
 
 // Bloque 4: Dashboard del cliente (CORREGIDO)
 const getClientDashboardData = asyncHandler(async (req, res) => {
-    const client = await Client.findOne({ user: req.user.id }).populate('employees', 'fullName idCard phone');
-    
-    if (!client) {
-        res.status(404);
-        throw new Error('Cliente no encontrado.');
-    }
-
-    const employeeIds = client.employees.map(emp => emp._id);
-    
-    if (employeeIds.length === 0) {
-        return res.json({ employeesList: [], grandTotal: 0 });
-    }
-
-    // --- INICIO DE LA CORRECCIÓN ---
+    const client = await Client.findById(req.user.profile._id).populate('employees', 'fullName idCard phone');
+    if (!client) { throw new Error('Perfil de cliente no encontrado.'); }
+    const employeeIds = client.employees.map(e => e._id);
+    if (employeeIds.length === 0) return res.json({ employeesList: [], grandTotal: 0 });
     const paymentTotals = await TimeLog.aggregate([
-        { $match: { employee: { $in: employeeIds } } },
-        { 
-            $group: { 
-                _id: '$employee', 
-                totalAPagar: { 
-                    $sum: { $toDouble: '$valorNeto' } // Se añade $toDouble para convertir a número antes de sumar
-                } 
-            } 
-        }
+        { $match: { employee: { $in: employeeIds }, isPaid: false } },
+        { $group: { _id: '$employee', totalAPagar: { $sum: '$valorNetoFinal' } } }
     ]);
-
-    const totalsMap = paymentTotals.reduce((acc, item) => {
-        acc[item._id.toString()] = item.totalAPagar;
-        return acc;
-    }, {});
-
-    const employeesList = client.employees.map(employee => {
-        const employeeJSON = employee.toObject();
-        employeeJSON.totalAPagar = totalsMap[employee._id.toString()] || 0;
-        return employeeJSON;
-    });
-
-    const grandTotal = employeesList.reduce((sum, emp) => sum + emp.totalAPagar, 0);
-
+    const totalsMap = paymentTotals.reduce((acc, { _id, totalAPagar }) => { acc[_id.toString()] = totalAPagar; return acc; }, {});
+    const grandTotal = Object.values(totalsMap).reduce((s, t) => s + t, 0);
+    const employeesList = client.employees.map(e => ({ ...e.toObject(), totalAPagar: totalsMap[e._id.toString()] || 0 }));
     res.json({ employeesList, grandTotal });
 });
 
 
 // Bloque 5: Exportar registros de cliente
 const exportClientTimeLogsToExcel = asyncHandler(async (req, res) => {
-    if (req.user.role !== 'cliente') {
-        res.status(403);
-        throw new Error('Solo los clientes pueden exportar registros.');
+    let clientToExport;
+
+    if (req.user.role === 'admin') {
+        const { clientId } = req.params;
+        clientToExport = await Client.findById(clientId);
+    } else if (req.user.role === 'cliente') {
+        clientToExport = await Client.findOne({ user: req.user.id });
     }
-    const client = await Client.findOne({ user: req.user.id });
-    if (!client) {
-        res.status(404);
+
+    if (!clientToExport) {
         throw new Error('Perfil de cliente no encontrado.');
     }
-    const timeLogs = await TimeLog.find({ employee: { $in: client.employees } })
-        .populate('employee', 'fullName')
-        .populate('user', 'username')
-        .sort({ date: 1, horaInicio: 1 });
+
+    const timeLogs = await TimeLog.find({ employee: { $in: clientToExport.employees } }).populate('employee', 'fullName');
+
     if (timeLogs.length === 0) {
-        res.status(404);
-        throw new Error('No hay registros de tiempo para exportar.');
+        throw new Error('No hay datos para exportar para este cliente.');
     }
     const dataForExcel = timeLogs.map(log => ({
         employeeName: log.employee?.fullName || 'N/A',
@@ -140,29 +122,28 @@ const exportClientTimeLogsToExcel = asyncHandler(async (req, res) => {
         registeredBy: log.user?.username || 'N/A',
         createdAt: log.createdAt,
     }));
-    const fileNamePrefix = client.companyName.replace(/[^a-zA-Z0-9]/g, '_');
-    const buffer = await generateTimeLogExcelReport(dataForExcel, `Reporte_Horarios_${fileNamePrefix}`);
+    // ✅ CORRECCIÓN: Usamos la variable correcta 'clientToExport'
+    const fileNamePrefix = clientToExport.companyName.replace(/[^a-zA-Z0-9]/g, '_');
+    const buffer = await generateTimeLogExcelReport(dataForExcel, `Reporte_${fileNamePrefix}`);
+
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', `attachment; filename=${fileNamePrefix}_registros.xlsx`);
+    res.setHeader('Content-Disposition', `attachment; filename=Reporte_${fileNamePrefix}.xlsx`);
     res.send(buffer);
 });
 
 // Bloque 6: Obtener auxiliares de un cliente
 const getClientAuxiliaries = asyncHandler(async (req, res) => {
-    const clientUser = req.user;
-    if (clientUser.role !== 'cliente') {
-        res.status(403);
-        throw new Error('Acceso denegado. Solo los clientes pueden ver sus auxiliares.');
-    }
-    const client = await Client.findOne({ user: clientUser._id });
+    const client = await Client.findOne({ user: req.user.id });
     if (!client) {
         res.status(404);
         throw new Error('Cliente no encontrado.');
     }
-    const auxiliaries = await User.find({ role: 'auxiliar', associatedClient: client._id }).select('-password');
+    const auxiliaries = await User.find({ 
+        role: 'auxiliar', 
+        associatedClient: client._id 
+    }).select('-password');
     res.json(auxiliaries);
 });
-
 // Bloque 7: Eliminar auxiliar
 const deleteAuxiliar = asyncHandler(async (req, res) => {
     const { auxiliarId } = req.params;

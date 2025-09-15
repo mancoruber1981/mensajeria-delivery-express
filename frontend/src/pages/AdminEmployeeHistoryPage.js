@@ -1,26 +1,56 @@
-// frontend/src/pages/AdminEmployeeHistoryPage.js
+// ====================
+// Página: Historial de Empleado (Vista de Administrador)
+// Componente: AdminEmployeeHistoryPage
+// Descripción: Permite al administrador ver, registrar, editar y liquidar los horarios de un repartidor específico.
+// ====================
 
-// Bloque 1: Importaciones
+// Bloque 1: Importaciones y Funciones Auxiliares
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { toast } from 'react-toastify';
 import API from '../api/api';
+import LoadingSpinner from '../components/LoadingSpinner';
 import '../index.css';
-import './TimeEntriesPage.css';
+import './RepartidorDashboardPage.css';
 
-// Bloque 2: Definición del Componente y Variables Iniciales
+
+const formatHoursAndMinutes = (decimalHours) => {
+    if (typeof decimalHours !== 'number' || isNaN(decimalHours)) return '0:00';
+    const hours = Math.floor(decimalHours);
+    const minutes = Math.round((decimalHours - hours) * 60);
+    return `${hours}:${minutes.toString().padStart(2, '0')}`;
+};
+
+// Bloque 2: Componente Principal y Estado Inicial
 const AdminEmployeeHistoryPage = () => {
-    const { employeeId } = useParams();
     const navigate = useNavigate();
     const formRef = useRef(null);
-    const { user } = useAuth();
+    const { user, loading: authLoading } = useAuth();
+    const { employeeId } = useParams();
 
-    const isAuxiliar = user && user.role === 'auxiliar';
-    const isClient = user && user.role === 'cliente';
-    const isAdmin = user && user.role === 'admin';
+// Declara la variable aquí
+    let dashboardTitle = 'Vista de Usuario'; //
+    
+if (user) {
+    if (user.role === 'admin') {
+        dashboardTitle = 'Vista de Administrador';
+    } else if (user.role === 'repartidor') {
+        dashboardTitle = 'Vista de Repartidor';
+    } else if (user.role === 'auxiliar') {
+        dashboardTitle = 'Vista de Auxiliar';
+    } else if (user.role === 'cliente') {
+        dashboardTitle = 'Vista de Cliente';
+    } else {
+        dashboardTitle = 'Vista de Usuario Desconocido';
+    }
+}
+    
 
     // Bloque 3: Estados del Componente
+    const [isAuxiliar, setIsAuxiliar] = useState(false);
+    const [isClient, setIsClient] = useState(false);
+    const [isAdmin, setIsAdmin] = useState(false);
     const [defaultHourlyRateForClient, setDefaultHourlyRateForClient] = useState('0');
     const [holidayHourlyRateForClient, setHolidayHourlyRateForClient] = useState('0');
     const [employeeName, setEmployeeName] = useState('Cargando...');
@@ -105,41 +135,41 @@ const AdminEmployeeHistoryPage = () => {
     }, [employeeId, navigate, isClient, isAuxiliar]);
 
     // Bloque 10 REFACTORIZADO: Cargar detalles del empleado, tarifas del cliente y logs en un solo useEffect
-    useEffect(() => {
-        const fetchData = async () => {
-            if (!employeeId) {
-                setLoading(false);
-                return;
-            }
-            try {
-                setLoading(true);
-                const employeeRes = await API.get(`/employees/${employeeId}`);
-                setEmployeeName(employeeRes.data.fullName);
-                let clientIdToFetch = null;
-                if (isClient && user.profile?._id) {
-                    clientIdToFetch = user.profile._id;
-                } else if (isAuxiliar && user.associatedClientProfile?._id) {
-                    clientIdToFetch = user.associatedClientProfile._id;
-                }
-                if (clientIdToFetch) {
-                    const clientRes = await API.get(`/clients/${clientIdToFetch}`);
-                    setDefaultHourlyRateForClient(clientRes.data.defaultHourlyRate?.toString() || '0');
-                    setHolidayHourlyRateForClient(clientRes.data.holidayHourlyRate?.toString() || '0');
-                }
-                const logsRes = await API.get(`/timelogs/employee/${employeeId}`);
-                setTimeLogs(logsRes.data);
-            } catch (error) {
-                console.error("Error al cargar datos iniciales:", error);
-                toast.error(error.response?.data?.message || "Error al cargar la información inicial.");
-                if (isClient) navigate('/dashboard-cliente');
-                else if (isAuxiliar) navigate('/auxiliar-home');
-                else navigate('/login');
-            } finally {
-                setLoading(false);
-            }
-        };
-        fetchData();
-    }, [employeeId, navigate, isClient, isAuxiliar, user]);
+useEffect(() => {
+    // Si no hay un usuario autenticado aún, no hacemos nada.
+    if (!user) return;
+
+    // 1. Actualizamos los roles basados en el usuario.
+    setIsAuxiliar(user.role === 'auxiliar');
+    setIsClient(user.role === 'cliente');
+    setIsAdmin(user.role === 'admin');
+
+    // 2. Definimos la función para cargar los datos del empleado.
+    const fetchData = async () => {
+        setLoading(true);
+        
+        // AÑADE ESTA LÍNEA PARA VERIFICAR EL ID
+        console.log("Intentando cargar historial para el ID:", employeeId);
+
+        try {
+            const employeeRes = await API.get(`/employees/${employeeId}`);
+            setEmployeeName(employeeRes.data.fullName);
+            const logsRes = await API.get(`/timelogs/employee/${employeeId}`);
+            setTimeLogs(logsRes.data);
+        } catch (error) {
+            // AÑADE ESTA LÍNEA PARA VER EL ERROR
+            console.error("¡La petición a la API falló!", error);
+            
+            toast.error("Error al cargar el historial del empleado.");
+            navigate('/admin/employees'); 
+        } finally {
+            setLoading(false); 
+        }
+    };
+    
+    fetchData();
+
+}, [employeeId, user, navigate]);
 
     // Bloque 7: Efecto para Actualizar Cálculos
     useEffect(() => {
@@ -314,12 +344,15 @@ const AdminEmployeeHistoryPage = () => {
         }
     };
 
+     if (loading || authLoading) {
+    return <LoadingSpinner />;
+}
     // Bloque 15: Renderizado del Componente (JSX)
     return (
         <div className="time-entry-page-wrapper">
             <div className="time-entry-form-wrapper">
                 <div className="form-container" ref={formRef}>
-                    <h3 className="form-header">Registrar Horario para: {employeeName}</h3>
+                    <h3 className="form-header">{dashboardTitle}: {employeeName}</h3>
                     <form onSubmit={handleSubmit}>
                         <div className="form-row">
                             <div className="form-group form-group-half">
@@ -467,7 +500,7 @@ const AdminEmployeeHistoryPage = () => {
                                         <td>{log.horaFin}</td>
                                         {/* ✅ Formato para mostrar el valor numérico como HH:mm */}
                                         <td>
-                                            {log.horasBrutas ? `${Math.floor(log.horasBrutas)}:${Math.round((log.horasBrutas - Math.floor(log.horasBrutas)) * 60).toString().padStart(2, '0')}` : 'N/A'}
+                                            {log.horasBrutas ? formatHoursAndMinutes(log.horasBrutas) : 'N/A'}
                                         </td>
                                         {!(isAuxiliar) && (
                                             <>
@@ -477,16 +510,16 @@ const AdminEmployeeHistoryPage = () => {
                                             </>
                                         )}
                                         <td className="action-buttons">
-                                            {(isAdmin || ((isClient || isAuxiliar) && !log.isFixed)) && (
-                                                <>
-                                                    <button className="button-edit" onClick={() => handleEdit(log)}>Editar</button>
-                                                    <button className="button-delete" onClick={() => handleDelete(log._id)}>Eliminar</button>
-                                                </>
-                                            )}
-                                            {((isClient || isAuxiliar) && log.isFixed) && (
-                                                <span style={{ color: 'gray', fontSize: '0.8em' }}>Fijado</span>
-                                            )}
-                                        </td>
+    {(isAdmin || ((isClient || isAuxiliar) && !log.isFixed)) && (
+        <>
+            <button className="button-edit" onClick={() => handleEdit(log)}>Editar</button>
+            <button className="button-delete" onClick={() => handleDelete(log._id)}>Eliminar</button>
+        </>
+    )}
+    {((isClient || isAuxiliar) && log.isFixed) && (
+        <span style={{ color: 'gray', fontSize: '0.8em' }}>Fijado</span>
+    )}
+</td>
                                     </tr>
                                 ))}
                             </tbody>

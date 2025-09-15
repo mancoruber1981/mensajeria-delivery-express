@@ -27,3 +27,35 @@
     background-color: #f8f9fa;
     font-weight: 600;
 }
+/* Estilo para el nuevo botón 'Pagado' (Color gris) */
+.btn-pagado {
+    background-color: #e0e0e0;
+    color: #333;
+    border: 1px solid #ccc;
+    padding: 6px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: bold;
+    font-size: 0.8em;
+    transition: background-color 0.3s;
+}
+
+.btn-pagado:hover {
+    background-color: #d0d0d0;
+}
+
+/* Estilo para el nuevo botón 'Liquidación' */
+.btn-liquidacion {
+    background-color: #1a73e8; /* Un azul de Google para un botón principal */
+    color: white;
+    border: none;
+    padding: 10px 15px;
+    border-radius: 5px;
+    cursor: pointer;
+    font-weight: bold;
+    transition: background-color 0.3s;
+}
+
+.btn-liquidacion:hover {
+    background-color: #155bb5;
+}

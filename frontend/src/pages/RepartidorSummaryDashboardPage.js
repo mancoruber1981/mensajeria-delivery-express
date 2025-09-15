@@ -18,32 +18,41 @@ const RepartidorSummaryDashboardPage = () => {
     const [error, setError] = useState(null);
 
     // Bloque 3
-    const fetchRepartidorSummary = useCallback(async () => {
-        if (!user || !user.profile || !user.profile._id) {
-            setError('Perfil de repartidor no encontrado. Acceso denegado.');
-            setPageLoading(false);
-            return;
-        }
+const fetchRepartidorSummary = useCallback(async () => {
+    if (!user || !user.profile || !user.profile._id) {
+        setError('Perfil de repartidor no encontrado. Acceso denegado.');
+        setPageLoading(false);
+        return;
+    }
 
-        try {
-            const res = await API.get(`/timelogs/employee/${user.profile._id}`);
-            const timeLogs = res.data;
+    try {
+        const res = await API.get(`/timelogs/employee/${user.profile._id}`);
+        const timeLogs = res.data;
 
-            let sumTotal = 0;
-            timeLogs.forEach(log => {
-                const valorNeto = log.valorNeto || 0;
-                const totalLoanDeducted = log.totalLoanDeducted || 0;
-                sumTotal += (valorNeto - totalLoanDeducted);
-            });
-            setTotalPagar(sumTotal);
-            setPageLoading(false);
-        } catch (err) {
-            console.error("ERROR RepartidorSummaryDashboard: Fallo al cargar el resumen:", err.response?.data?.message || err.message);
-            setError(err.response?.data?.message || "Error al cargar el resumen del repartidor.");
-            toast.error(err.response?.data?.message || "Error al cargar el resumen.");
-            setPageLoading(false);
-        }
-    }, [user]);
+        let sumTotal = 0;
+
+        // ✅ --- INICIO DE LA CORRECCIÓN ---
+        // Filtramos para obtener solo los registros NO PAGADOS
+        const unpaidLogs = timeLogs.filter(log => !log.isPaid);
+
+        // Ahora, sumamos únicamente los registros pendientes
+        unpaidLogs.forEach(log => {
+            const valorNeto = log.valorNeto || 0;
+            const totalLoanDeducted = log.totalLoanDeducted || 0;
+            sumTotal += (valorNeto - totalLoanDeducted);
+        });
+        // --- FIN DE LA CORRECCIÓN ---
+
+        setTotalPagar(sumTotal);
+        setPageLoading(false);
+
+    } catch (err) {
+        console.error("ERROR RepartidorSummaryDashboard: Fallo al cargar el resumen:", err.response?.data?.message || err.message);
+        setError(err.response?.data?.message || "Error al cargar el resumen del repartidor.");
+        toast.error(err.response?.data?.message || "Error al cargar el resumen.");
+        setPageLoading(false);
+    }
+}, [user]);
 
     // Bloque 4
     useEffect(() => {

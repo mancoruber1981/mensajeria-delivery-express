@@ -14,6 +14,8 @@ const uploadRoutes = require('./routes/upload');
 const exportRoutes = require('./routes/export');
 const clientRoutes = require('./routes/clients');
 const adminRoutes = require('./routes/adminRoutes');
+const loanRoutes = require('./routes/loanRoutes');
+
 
 const app = express();
 
@@ -26,7 +28,8 @@ process.on('uncaughtException', (err) => {
     console.error('🔥 SERVER CRASH - UNCAUGHT EXCEPTION:', err);
 });
 
-// 1. CORS
+
+app.use(express.json());
 app.use(cors({
     origin: process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',') : '*',
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
@@ -34,7 +37,6 @@ app.use(cors({
 }));
 
 // 2. Parseo de cuerpo de solicitudes
-app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
 // 3. Archivos estáticos
@@ -51,6 +53,7 @@ app.use('/api/upload', uploadRoutes);
 app.use('/api/export', exportRoutes);
 app.use('/api/clients', clientRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/loans', loanRoutes);
 
 // 6. Middleware de errores
 app.use((err, req, res, next) => {

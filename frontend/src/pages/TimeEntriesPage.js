@@ -4,51 +4,54 @@
 // Descripción: Permite registrar y gestionar las horas trabajadas por un empleado, incluyendo horas brutas, descuentos, deducciones y cálculo de valor final.
 // ====================
 
-// Bloque 1: Importaciones
+// Bloque 1: Importaciones y Hooks de React
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { toast } from 'react-toastify';
 import API from '../api/api';
-import '../index.css';
+import LoadingSpinner from '../components/LoadingSpinner';
 import './TimeEntriesPage.css';
 
-// Bloque 2: Definición del Componente y Variables Iniciales
+// Bloque 2: Definición del Componente y Estado Inicial
 const TimeEntriesPage = () => {
     const { employeeId } = useParams();
     const navigate = useNavigate();
     const formRef = useRef(null);
     const { user } = useAuth();
+    
+    // ✅ CORRECCIÓN: Declara 'clientRates' primero, antes de usarlo.
+    const [clientRates, setClientRates] = useState({ default: '0', holiday: '0' });
+    
+    // ✅ CORRECCIÓN: Ahora estas variables están definidas correctamente.
+    const isAuxiliar = user?.role === 'auxiliar';
+    const isClient = user?.role === 'cliente';
+    const isAdmin = user?.role === 'admin';
+    const defaultHourlyRateForClient = clientRates.default;
+    const holidayHourlyRateForClient = clientRates.holiday;
 
-    const isAuxiliar = user && user.role === 'auxiliar';
-    const isClient = user && user.role === 'cliente';
-    const isAdmin = user && user.role === 'admin';
-
-    // Bloque 3: Estados del Componente
-    const [defaultHourlyRateForClient, setDefaultHourlyRateForClient] = useState('0');
-    const [holidayHourlyRateForClient, setHolidayHourlyRateForClient] = useState('0');
     const [employeeName, setEmployeeName] = useState('Cargando...');
     const [timeLogs, setTimeLogs] = useState([]);
     const [editingLog, setEditingLog] = useState(null);
     const [loading, setLoading] = useState(true);
+
     const [formData, setFormData] = useState({
         date: new Date().toISOString().split('T')[0],
         horaInicio: '',
         horaFin: '',
         valorHora: '0',
         festivo: false,
-        descuentoAlmuerzo: '0',
         minutosAlmuerzoSinPago: '0',
         empresa: '',
         montoPrestamoDeducir: '0'
     });
-    // ✅ Renombramos 'horasBrutas' a 'horasNetas' y creamos una nueva para el total
+    
     const [horasTotales, setHorasTotales] = useState(0); 
     const [subtotal, setSubtotal] = useState(0);
     const [valorNeto, setValorNeto] = useState(0);
     const [valorFinalConDeducciones, setValorFinalConDeducciones] = useState(0);
 
-    // Bloque 6: Función de Recálculo de Totales (Lógica Corregida)
+// Bloque 3: Función de Recálculo de Totales
     const recalculateTotals = useCallback((data) => {
         const { horaInicio, horaFin, valorHora, descuentoAlmuerzo, minutosAlmuerzoSinPago, montoPrestamoDeducir } = data;
         
@@ -78,7 +81,6 @@ const TimeEntriesPage = () => {
             const prestamoADeducir = parseFloat(montoPrestamoDeducir) || 0;
             const finalValue = total - prestamoADeducir;
 
-            // ✅ Establecemos las horas totales antes de la deducción de minutos
             setHorasTotales(totalHoursDecimal); 
             setSubtotal(sub);
             setValorNeto(total);
@@ -91,66 +93,45 @@ const TimeEntriesPage = () => {
         }
     }, [isAuxiliar]);
 
-    // Bloque 9: Función para Obtener Registros de Tiempo
-    const fetchTimeLogs = useCallback(async () => {
-        if (!employeeId) return;
+// Bloque 4: Lógica para Obtener Datos (FetchData)
+    const fetchData = useCallback(async () => {
+        if (!employeeId || !user) return;
         try {
             setLoading(true);
-            const res = await API.get(`/timelogs/employee/${employeeId}`);
-            setTimeLogs(res.data);
+            const employeeRes = await API.get(`/employees/${employeeId}`);
+            setEmployeeName(employeeRes.data.fullName);
+
+            const logsRes = await API.get(`/timelogs/employee/${employeeId}`);
+            setTimeLogs(logsRes.data);
+
+            if (user.role === 'cliente' || user.role === 'auxiliar') {
+                const clientId = user.role === 'cliente' ? user.profile._id : user.associatedClient;
+                const clientRes = await API.get(`/clients/${clientId}`);
+                const defaultRate = clientRes.data.defaultHourlyRate?.toString() || '0';
+                
+                setClientRates({
+                    default: defaultRate,
+                    holiday: clientRes.data.holidayHourlyRate?.toString() || '0'
+                });
+                setFormData(prev => ({ ...prev, valorHora: defaultRate, empresa: clientRes.data.companyName }));
+            }
         } catch (error) {
-            toast.error(error.response?.data?.message || "No se pudo cargar el historial.");
-            if (isClient) navigate('/dashboard-cliente');
-            else if (isAuxiliar) navigate('/auxiliar-home');
-            else navigate('/login');
+            toast.error(error.response?.data?.message || "Error al cargar datos.");
+            navigate(user.role === 'cliente' ? '/dashboard-cliente' : '/login');
         } finally {
             setLoading(false);
         }
-    }, [employeeId, navigate, isClient, isAuxiliar]);
+    }, [employeeId, user, navigate]);
 
-    // Bloque 10 REFACTORIZADO: Cargar detalles del empleado, tarifas del cliente y logs en un solo useEffect
+// Bloque 5: Hooks de Efecto para Cargar Datos y Actualizar Cálculos
     useEffect(() => {
-        const fetchData = async () => {
-            if (!employeeId) {
-                setLoading(false);
-                return;
-            }
-            try {
-                setLoading(true);
-                const employeeRes = await API.get(`/employees/${employeeId}`);
-                setEmployeeName(employeeRes.data.fullName);
-                let clientIdToFetch = null;
-                if (isClient && user.profile?._id) {
-                    clientIdToFetch = user.profile._id;
-                } else if (isAuxiliar && user.associatedClientProfile?._id) {
-                    clientIdToFetch = user.associatedClientProfile._id;
-                }
-                if (clientIdToFetch) {
-                    const clientRes = await API.get(`/clients/${clientIdToFetch}`);
-                    setDefaultHourlyRateForClient(clientRes.data.defaultHourlyRate?.toString() || '0');
-                    setHolidayHourlyRateForClient(clientRes.data.holidayHourlyRate?.toString() || '0');
-                }
-                const logsRes = await API.get(`/timelogs/employee/${employeeId}`);
-                setTimeLogs(logsRes.data);
-            } catch (error) {
-                console.error("Error al cargar datos iniciales:", error);
-                toast.error(error.response?.data?.message || "Error al cargar la información inicial.");
-                if (isClient) navigate('/dashboard-cliente');
-                else if (isAuxiliar) navigate('/auxiliar-home');
-                else navigate('/login');
-            } finally {
-                setLoading(false);
-            }
-        };
-        fetchData();
-    }, [employeeId, navigate, isClient, isAuxiliar, user]);
+        if (user) fetchData();
+    }, [fetchData, user]);
 
-    // Bloque 7: Efecto para Actualizar Cálculos
     useEffect(() => {
         recalculateTotals(formData);
     }, [formData, recalculateTotals]);
 
-    // Bloque Adicional: Establecer el valor por hora dinámicamente y nombre de empresa
     useEffect(() => {
         if (editingLog) return;
         let clientCompanyName = '';
@@ -167,7 +148,7 @@ const TimeEntriesPage = () => {
         }));
     }, [user, isClient, isAuxiliar, editingLog, formData.festivo, defaultHourlyRateForClient, holidayHourlyRateForClient]);
 
-    // Bloque 8: Efecto para Cargar Datos en Modo Edición
+// Bloque 6: Lógica para el Modo Edición
     useEffect(() => {
         if (editingLog) {
             const minutosSinPagoNum = parseInt(editingLog.minutosAlmuerzoSinPago, 10) || 0;
@@ -201,8 +182,7 @@ const TimeEntriesPage = () => {
         }
     }, [editingLog, recalculateTotals, isAuxiliar, isClient, defaultHourlyRateForClient, holidayHourlyRateForClient]);
 
-
-    // Bloque 11: Manejador de Cambios del Formulario
+// Bloque 7: Manejador de Cambios del Formulario
     const handleFormChange = (e) => {
         const { name, value, type, checked } = e.target;
         if (name === 'festivo' && (isAuxiliar || isClient)) {
@@ -218,7 +198,7 @@ const TimeEntriesPage = () => {
         }
     };
 
-    // Bloque 12: Manejador de Envío del Formulario (Ahora envía todos los datos)
+// Bloque 8: Manejador de Envío del Formulario
     const handleSubmit = async (e) => {
         e.preventDefault();
         if (!formData.empresa.trim()) {
@@ -243,7 +223,6 @@ const TimeEntriesPage = () => {
             minutosAlmuerzoSinPago: minutosSinPagoNum,
             empresa: formData.empresa.trim(),
             totalLoanDeducted: parseFloat(formData.montoPrestamoDeducir) || 0,
-            // ✅ Envía 'horasTotales' al backend
             horasBrutas: horasTotales,
             subtotal: subtotal,
             valorNeto: valorNeto
@@ -270,14 +249,14 @@ const TimeEntriesPage = () => {
                 montoPrestamoDeducir: '0'
             });
             setEditingLog(null);
-            fetchTimeLogs();
+            fetchData();
         } catch (err) {
             console.error("Error en handleSubmit:", err);
             toast.error(err.response?.data?.message || 'Error al guardar.');
         }
     };
 
-    // Bloque 13: Manejador de Edición
+// Bloque 9: Manejador de Edición de Registros
     const handleEdit = (logToEdit) => {
         const minutosSinPagoNum = parseInt(logToEdit.minutosAlmuerzoSinPago, 10) || 0;
         const valorHoraNum = parseFloat(logToEdit.valorHora) || 0;
@@ -305,26 +284,28 @@ const TimeEntriesPage = () => {
         });
     };
 
-    // Bloque 14: Manejador de Eliminación
+// Bloque 10: Manejador de Eliminación de Registros
     const handleDelete = async (logId) => {
         if (window.confirm('¿Estás seguro de que quieres eliminar este registro?')) {
             try {
                 await API.delete(`/timelogs/${logId}`);
                 toast.success('Registro eliminado con éxito.');
-                fetchTimeLogs();
+                fetchData(); 
             } catch (err) {
                 toast.error(err.response?.data?.message || 'Error al eliminar.');
             }
         }
     };
 
-    // Bloque 15: Renderizado del Componente (JSX)
+// Bloque 11: Renderizado del Componente - Contenedor Principal
     return (
         <div className="time-entry-page-wrapper">
             <div className="time-entry-form-wrapper">
                 <div className="form-container" ref={formRef}>
                     <h3 className="form-header">Registrar Horario para: {employeeName}</h3>
                     <form onSubmit={handleSubmit}>
+
+{/* Bloque 12: Campos del Formulario (Fecha, Empresa, Horas) */}
                         <div className="form-row">
                             <div className="form-group form-group-half">
                                 <label>Fecha:</label>
@@ -369,6 +350,8 @@ const TimeEntriesPage = () => {
                                 <input type="time" name="horaFin" value={formData.horaFin} onChange={handleFormChange} required />
                             </div>
                         </div>
+
+{/* Bloque 13: Campos del Formulario (Descuentos y Deducciones) */}
                         <div className="form-row">
                             {!(isAuxiliar) && (
                                 <div className="form-group form-group-half">
@@ -400,6 +383,8 @@ const TimeEntriesPage = () => {
                             </label>
                         </div>
                         <hr />
+
+{/* Bloque 14: Sección de Cálculos Automáticos */}
                         {!(isAuxiliar) && (
                             <>
                                 <h4>Cálculos Automáticos:</h4>
@@ -408,7 +393,6 @@ const TimeEntriesPage = () => {
                                         <label>Horas Brutas:</label>
                                         <input
                                             type="text"
-                                            // ✅ Usamos 'horasTotales' para la visualización de las horas brutas
                                             value={`${Math.floor(horasTotales)}:${Math.round((horasTotales - Math.floor(horasTotales)) * 60).toString().padStart(2, '0')}`}
                                             readOnly
                                             className="read-only-input"
@@ -437,11 +421,12 @@ const TimeEntriesPage = () => {
                 </div>
             </div>
 
-            {/* Bloque 15: Historial de Registros */}
+{/* Bloque 15: Sección de Historial de Registros */}
             <div className="dashboard-card" style={{ marginTop: '2rem' }}>
                 <h3>Historial de Registros</h3>
                 {loading ? (
-                    <p>Cargando registros...</p>
+                    // ✅ CORRECCIÓN: Usando el componente LoadingSpinner para corregir la advertencia de 'no-unused-vars'
+                    <LoadingSpinner />
                 ) : timeLogs.length > 0 ? (
                     <div className="table-responsive-container">
                         <table>
@@ -469,7 +454,6 @@ const TimeEntriesPage = () => {
                                         <td>{log.empresa || 'N/A'}</td>
                                         <td>{log.horaInicio}</td>
                                         <td>{log.horaFin}</td>
-                                        {/* ✅ Formato para mostrar el valor numérico como HH:mm */}
                                         <td>
                                             {log.horasBrutas ? `${Math.floor(log.horasBrutas)}:${Math.round((log.horasBrutas - Math.floor(log.horasBrutas)) * 60).toString().padStart(2, '0')}` : 'N/A'}
                                         </td>

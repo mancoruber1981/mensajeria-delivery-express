@@ -1,4 +1,5 @@
-// Bloque 1
+// fronted/src/RepartidorDashboardPage/pagina espejo para ver los registros del repartidor
+// ==================== BLOQUE 1: Importaciones y Funciones Auxiliares ====================
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
@@ -6,7 +7,7 @@ import { toast } from 'react-toastify';
 import API from '../api/api';
 import LoadingSpinner from '../components/LoadingSpinner';
 import '../index.css';
-
+import './RepartidorDashboardPage.css';
 
 // Esta función auxiliar se mantiene para formatear la visualización
 const formatHoursAndMinutes = (decimalHours) => {
@@ -20,7 +21,7 @@ const parse12HourTime = (timeString) => {
     if (!timeString) return null;
     const [time, period] = timeString.split(' ');
     let [hours, minutes] = time.split(':').map(Number);
-    
+
     if (period && period.toLowerCase() === 'p.m.' && hours !== 12) {
         hours += 12;
     } else if (period && period.toLowerCase() === 'a.m.' && hours === 12) {
@@ -29,20 +30,63 @@ const parse12HourTime = (timeString) => {
     return { hours, minutes };
 }
 
-// Bloque 2
+
+// ==================== BLOQUE 2: Componente Principal, Hooks y Estado Inicial ====================
 const RepartidorDashboardPage = () => {
     const navigate = useNavigate();
     const formRef = useRef(null);
     const { user, loading: authLoading } = useAuth();
     const { employeeId } = useParams();
     const [viewingAsAdmin, setViewingAsAdmin] = useState(false);
+    const [showSettlementModal, setShowSettlementModal] = useState(false);
+    const [settlementDetails, setSettlementDetails] = useState(null);
+    const [deductSS, setDeductSS] = useState(true); // Checkbox para Seguridad Social
+    const [loading, setLoading] = useState(false); // ✅ AÑADE ESTA LÍNEA
 
-    //Bolque 2.1 Esta es la única lógica de roles que necesitas aquí
+    // Función que se llama al presionar "Liquidar Quincena"
+    const handleOpenSettlementModal = async () => {
+    setLoading(true); // Muestra un indicador de carga general
+    try {
+        // 1. Pide al backend un cálculo previo de la liquidación (activamos la llamada)
+        const { data } = await API.get(`/admin/preview-settlement/${employeeId}`);
+
+        // 2. Guardamos los detalles en el estado para que el modal los pueda usar
+        setSettlementDetails(data);
+        
+        // 3. Ahora que tenemos los datos, mostramos el modal
+        setShowSettlementModal(true);
+
+    } catch (err) {
+        toast.error(err.response?.data?.message || "Error al obtener los datos de liquidación.");
+    } finally {
+        setLoading(false); // Ocultamos el indicador de carga, tanto si hay éxito como si hay error
+    }
+};
+
+    // Función que se llama al confirmar desde el modal
+    const handleConfirmSettlement = async () => {
+    try {
+        setLoading(true);
+        // ✅ VERIFICA QUE LA URL ES EXACTAMENTE ESTA
+        const { data } = await API.post(`/admin/settle-fortnight/${employeeId}`, {
+            deductSocialSecurity: deductSS
+        });
+        toast.success(data.message);
+        setShowSettlementModal(false);
+        fetchRepartidorData();
+    } catch (err) {
+        toast.error(err.response?.data?.message || "Error al confirmar la liquidación.");
+    } finally {
+        setLoading(false);
+    }
+};
+
     const isAdminView = user?.role === 'admin' && employeeId;
     const targetEmployeeId = isAdminView ? employeeId : user?.profile?._id;
 
     // Bloque 2.2
     const [employeeName, setEmployeeName] = useState('Cargando...');
+    const [repartidorBalance, setRepartidorBalance] = useState(0); // ✅ Estado para el balance
     const [timeLogs, setTimeLogs] = useState([]);
     const [editingLog, setEditingLog] = useState(null);
     const [formData, setFormData] = useState({
@@ -65,7 +109,8 @@ const RepartidorDashboardPage = () => {
     const [pageLoading, setPageLoading] = useState(true);
     const [error, setError] = useState(null);
 
-    // Bloque 3 (Corregido: La lógica de cálculo ahora es más robusta)
+
+// ==================== BLOQUE 3: Lógica de Recálculo de Totales (useCallback) ====================
     const recalculateTotals = useCallback((data) => {
         const { horaInicio, horaFin, valorHora, minutosAlmuerzoSinPago, montoPrestamoDeducir } = data;
 
@@ -83,21 +128,17 @@ const RepartidorDashboardPage = () => {
             const prestamoADeducir = parseFloat(montoPrestamoDeducir) || 0;
 
             const totalMinutesNetos = totalMinutesBrutos - minutosSinPagoNum;
-
-            // Ahora los cálculos se basan en los minutos, no en horas decimales directas
             const valorNetoCalculado = (totalMinutesNetos / 60) * valorHoraNum;
             const subtotalCalculado = (totalMinutesBrutos / 60) * valorHoraNum;
-
             const finalValue = valorNetoCalculado - prestamoADeducir;
-
             const horasBrutasFormato = formatHoursAndMinutes(totalMinutesBrutos / 60);
 
             return {
                 minutosBrutos: totalMinutesBrutos,
                 horasBrutas: horasBrutasFormato,
-                subtotal: subtotalCalculado, // No redondeamos aquí para mantener la precisión
-                valorNeto: valorNetoCalculado, // No redondeamos aquí
-                valorFinalConDeducciones: finalValue // No redondeamos aquí
+                subtotal: subtotalCalculado,
+                valorNeto: valorNetoCalculado,
+                valorFinalConDeducciones: finalValue
             };
         } else {
             return {
@@ -111,9 +152,8 @@ const RepartidorDashboardPage = () => {
     }, []);
 
 
-    // Bloque 4 (Corregido)
+// ==================== BLOQUE 4: useEffect para Actualizar Cálculos ====================
     useEffect(() => {
-        // Usamos el resultado de la función para actualizar el estado
         const results = recalculateTotals(formData);
         setHorasBrutas(results.horasBrutas);
         setSubtotal(results.subtotal);
@@ -121,7 +161,8 @@ const RepartidorDashboardPage = () => {
         setValorFinalConDeducciones(results.valorFinalConDeducciones);
     }, [formData, recalculateTotals]);
 
-    // Bloque 5 (Corregido)
+
+// ==================== BLOQUE 5: useEffect para Editar Registros ====================
     useEffect(() => {
         if (editingLog) {
             const logFormatted = {
@@ -140,11 +181,19 @@ const RepartidorDashboardPage = () => {
         }
     }, [editingLog]);
 
-    // Bloque 6: Fetch de Datos del Repartidor (Centralizado)
+
+// ==================== BLOQUE 6: Fetch de Datos del Repartidor (Centralizado y CORREGIDO) ====================
     const fetchRepartidorData = useCallback(async () => {
         setPageLoading(true);
         setError(null);
-        const currentTargetEmployeeId = isAdminView ? employeeId : user?.profile?._id;
+
+        let currentTargetEmployeeId;
+        if (isAdminView) {
+            currentTargetEmployeeId = employeeId;
+            setViewingAsAdmin(true);
+        } else {
+            currentTargetEmployeeId = user?.profile?._id;
+        }
 
         if (!user || !currentTargetEmployeeId) {
             setError('No se pudo determinar el ID del empleado o el perfil del usuario.');
@@ -154,14 +203,19 @@ const RepartidorDashboardPage = () => {
 
         try {
             let employeeDisplayName = '';
+            let currentBalance = 0;
+
             if (isAdminView) {
                 const employeeRes = await API.get(`/employees/${currentTargetEmployeeId}`);
                 employeeDisplayName = employeeRes.data.fullName || 'Empleado Desconocido';
+                currentBalance = employeeRes.data.currentBalance;
             } else {
                 employeeDisplayName = user.profile?.fullName || user.username;
+                currentBalance = user.profile?.currentBalance || 0;
             }
-            setEmployeeName(employeeDisplayName);
 
+            setEmployeeName(employeeDisplayName);
+            setRepartidorBalance(currentBalance);
             const res = await API.get(`/timelogs/employee/${currentTargetEmployeeId}`);
             setTimeLogs(res.data);
         } catch (err) {
@@ -173,20 +227,23 @@ const RepartidorDashboardPage = () => {
         }
     }, [user, employeeId, isAdminView]);
 
-    // Bloque 7: useEffect para Cargar Datos Iniciales
+
+// ==================== BLOQUE 7: useEffect para Cargar Datos Iniciales ====================
     useEffect(() => {
         if (!authLoading) {
             fetchRepartidorData();
         }
     }, [authLoading, fetchRepartidorData]);
 
-    // Bloque 8
+
+// ==================== BLOQUE 8: Manejador de Cambios de Formulario ====================
     const handleFormChange = (e) => {
         const { name, value, type, checked } = e.target;
         setFormData(prev => ({ ...prev, [name]: type === 'checkbox' ? checked : value }));
     };
 
-    // Bloque 9 (handleSubmit corregido para enviar los datos precisos)
+
+// ==================== BLOQUE 9: Manejador de Envío de Formulario (handleSubmit) ====================
     const handleSubmit = async (e) => {
         e.preventDefault();
         const currentTargetEmployeeId = isAdminView ? employeeId : user?.profile?._id;
@@ -200,7 +257,6 @@ const RepartidorDashboardPage = () => {
             return;
         }
 
-        // Obtiene los valores calculados de manera síncrona
         const calculatedValues = recalculateTotals(formData);
 
         const dataToSend = {
@@ -214,12 +270,11 @@ const RepartidorDashboardPage = () => {
             minutosAlmuerzoSinPago: parseInt(formData.minutosAlmuerzoSinPago, 10),
             empresa: formData.empresa.trim(),
             totalLoanDeducted: parseFloat(formData.montoPrestamoDeducir) || 0,
-            
-            // **CORRECCIÓN CLAVE:** Enviar los valores calculados con precisión
-            horasBrutas: calculatedValues.minutosBrutos / 60, // Guardamos el valor decimal exacto
+
+            horasBrutas: calculatedValues.minutosBrutos / 60,
             subtotal: calculatedValues.subtotal,
             valorNeto: calculatedValues.valorNeto,
-            valorFinalConDeducciones: calculatedValues.valorFinalConDeducciones,
+            valorNetoFinal: calculatedValues.valorFinalConDeducciones,
         };
 
         try {
@@ -230,7 +285,9 @@ const RepartidorDashboardPage = () => {
                 await API.post('/timelogs', dataToSend);
                 toast.success('Registro guardado con éxito');
             }
+
             fetchRepartidorData();
+
             setEditingLog(null);
             setFormData({
                 date: new Date().toISOString().split('T')[0],
@@ -249,7 +306,8 @@ const RepartidorDashboardPage = () => {
         }
     };
 
-    // Bloque 10
+
+// ==================== BLOQUE 10: Manejadores de Acciones de la Tabla (handleEdit y handleDelete) ====================
     const handleEdit = (logToEdit) => {
         const logFormatted = {
             ...logToEdit,
@@ -272,7 +330,6 @@ const RepartidorDashboardPage = () => {
         });
     };
 
-    // Bloque 11 (Corregido: handleDelete)
     const handleDelete = async (logId) => {
         if (window.confirm('¿Estás seguro de que quieres eliminar este registro?')) {
             try {
@@ -280,13 +337,46 @@ const RepartidorDashboardPage = () => {
                 toast.success('Registro eliminado con éxito.');
                 fetchRepartidorData();
             } catch (err) {
-                console.error("Error al eliminar registro:", err.response?.data?.message || err.message);
-                toast.error(err.response?.data?.message || 'Error al eliminar el registro.');
+                // ...
             }
         }
     };
 
-    // Bloque 12 (Corregido)
+
+// ==================== BLOQUE 11: Manejadores de Liquidación y Pago ====================
+    const handlePaid = async (logId) => {
+        if (user?.role !== 'admin') {
+            toast.error("Acceso denegado. Solo los administradores pueden marcar registros como pagados.");
+            return;
+        }
+
+        if (window.confirm('¿Estás seguro de que quieres marcar este registro como PAGADO?')) {
+            try {
+                await API.put(`/timelogs/mark-paid/${logId}`);
+                toast.success('Registro marcado como pagado con éxito.');
+                fetchRepartidorData();
+            } catch (err) {
+                toast.error(err.response?.data?.message || 'Error al marcar como pagado.');
+            }
+        }
+    };
+
+    const handleSettleEmployee = async (employeeId, employeeName) => {
+        if (window.confirm(`¿Estás seguro de que quieres liquidar la quincena completa para ${employeeName}?`)) {
+            try {
+                toast.info('Procesando liquidación individual...');
+                const { data } = await API.post(`/admin/settle-fortnight/${employeeId}`);
+                toast.success(data.message);
+                
+                fetchRepartidorData(); 
+            } catch (err) {
+                toast.error(err.response?.data?.message || 'Error al procesar la liquidación.');
+            }
+        }
+    };
+
+
+// ==================== BLOQUE 12: Lógica de Renderizado Condicional ====================
     if (pageLoading) return <LoadingSpinner />;
     if (error) return <div className="error-message">Error: {error}</div>;
 
@@ -294,7 +384,8 @@ const RepartidorDashboardPage = () => {
         return <div className="error-message">Acceso denegado.</div>;
     }
 
-    // Bloque 13
+
+// ==================== BLOQUE 13: Renderizado JSX del Componente ====================
     return (
         <div className="time-entry-page-wrapper">
             <div className="time-entry-form-wrapper">
@@ -391,12 +482,22 @@ const RepartidorDashboardPage = () => {
             </div>
 
             <div className="dashboard-card" style={{ marginTop: '2rem' }}>
-                <h3>
-                    {viewingAsAdmin
-                        ? `Historial de Registros de ${employeeName}`
-                        : "Mi Historial de Registros"
-                    }
-                </h3>
+                
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '20px' }}>
+                    <h3>
+                        {viewingAsAdmin ? `Historial de Registros de ${employeeName}` : "Mi Historial de Registros"}
+                    </h3>
+                    {viewingAsAdmin && (
+                        <button 
+                            onClick={handleOpenSettlementModal} 
+                            className="btn btn-danger" 
+                            style={{ marginTop: '10px' }}
+                        >
+                            Liquidar Quincena de {employeeName}
+                        </button>
+                    )}
+                </div>
+
                 <div className="table-responsive-container">
                     {timeLogs.length > 0 ? (
                         <table>
@@ -418,11 +519,9 @@ const RepartidorDashboardPage = () => {
                                     const valorNetoInicial = log.valorNeto || 0;
                                     const deduccion = log.totalLoanDeducted || 0;
                                     const valorNetoFinal = valorNetoInicial - deduccion;
-                                    
                                     const horasBrutasFormateadas = formatHoursAndMinutes(log.horasBrutas);
-
                                     return (
-                                        <tr key={log._id}>
+                                        <tr key={log._id} className={log.isPaid ? 'paid-row' : ''}>
                                             <td>{new Date(log.date).toLocaleDateString('es-CO', { timeZone: 'UTC' })}</td>
                                             <td>{log.empresa || 'N/A'}</td>
                                             <td>{log.horaInicio}</td>
@@ -432,8 +531,20 @@ const RepartidorDashboardPage = () => {
                                             <td>${deduccion.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                                             <td>${valorNetoFinal.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                                             <td className="action-buttons">
-                                                <button className="button-edit" onClick={() => handleEdit(log)}>Editar</button>
-                                                <button className="button-delete" onClick={() => handleDelete(log._id)}>Eliminar</button>
+                                                {user?.role === 'admin'? (
+                                                    <>
+                                                        <button className="button-edit" onClick={() => handleEdit(log)}>Editar</button>
+                                                        <button className="button-delete" onClick={() => handleDelete(log._id)}>Eliminar</button>
+                                                        <button className="btn-pagado" onClick={() => handlePaid(log._id)}>Pagado</button>
+                                                    </>
+                                                ) : user?.role === 'repartidor' && !log.isFixed ? (
+                                                    <>
+                                                        <button className="button-edit" onClick={() => handleEdit(log)}>Editar</button>
+                                                        <button className="button-delete" onClick={() => handleDelete(log._id)}>Eliminar</button>
+                                                    </>
+                                                ) : (
+                                                    <span className="paid-label">Pagado</span>
+                                                )}
                                             </td>
                                         </tr>
                                     );
@@ -445,6 +556,37 @@ const RepartidorDashboardPage = () => {
                     )}
                 </div>
             </div>
+
+            {showSettlementModal && settlementDetails && (
+                <div className="modal-overlay">
+                    <div className="modal-content">
+                        <h3>Confirmar Liquidación para {employeeName}</h3>
+                        <hr />
+                        <p><strong>Total Bruto a Pagar:</strong> ${settlementDetails.grossTotal.toLocaleString('es-CO')}</p>
+                        <p><strong>Descuento Préstamo:</strong> - ${settlementDetails.loanRepayment.toLocaleString('es-CO')}</p>
+                        <label style={{ display: 'flex', alignItems: 'center', margin: '15px 0' }}>
+                            <input 
+                                type="checkbox" 
+                                checked={deductSS} 
+                                onChange={() => setDeductSS(!deductSS)}
+                                style={{ marginRight: '10px', transform: 'scale(1.2)' }}
+                            />
+                            Descontar Seguridad Social (${settlementDetails.socialSecurityDeduction.toLocaleString('es-CO')})
+                        </label>
+                        <hr/>
+                        <h4 style={{ textAlign: 'right' }}>
+                            Total Final a Pagar: 
+                            <strong>
+                                ${ (settlementDetails.grossTotal - settlementDetails.loanRepayment - (deductSS ? settlementDetails.socialSecurityDeduction : 0)).toLocaleString('es-CO') }
+                            </strong>
+                        </h4>
+                        <div style={{ marginTop: '20px', display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                            <button onClick={() => setShowSettlementModal(false)} className="btn">Cancelar</button>
+                            <button onClick={handleConfirmSettlement} className="btn btn-success">Confirmar y Liquidar</button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

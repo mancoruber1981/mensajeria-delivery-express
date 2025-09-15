@@ -7,61 +7,71 @@ const Client = require('../models/Client');
 const mongoose = require('mongoose');
 const TimeLog = require('../models/TimeLog');
 
-// Obtener todos los empleados con su total a pagar
+// --- FUNCIÓN 1: Obtener todos los empleados con su total ---
 const getAllEmployees = asyncHandler(async (req, res) => {
-    const employeesWithTotals = await Employee.aggregate([
-        { $match: { role: 'repartidor' } },
-        { $lookup: { from: 'timelogs', localField: '_id', foreignField: 'employee', as: 'timelogs' } },
-        { $addFields: { totalAPagar: { $sum: '$timelogs.valorNetoFinal' } } },
-        { $project: { timelogs: 0 } }
+    // 1. Obtenemos todos los empleados que son repartidores
+    const employees = await Employee.find({ role: 'repartidor' }).populate('user', 'username').lean();
+
+    // 2. Calculamos los totales a pagar sumando solo los registros NO pagados
+    const totals = await TimeLog.aggregate([
+        { $match: { isPaid: false } },
+        { $group: { _id: '$employee', total: { $sum: '$valorNetoFinal' } } }
     ]);
+
+    // 3. Convertimos el resultado en un mapa para buscar totales fácilmente
+    const totalsMap = totals.reduce((acc, item) => {
+        acc[item._id.toString()] = item.total;
+        return acc;
+    }, {});
+
+    // 4. Asignamos el total calculado a cada empleado
+    const employeesWithTotals = employees.map(emp => {
+        emp.currentBalance = totalsMap[emp._id.toString()] || 0;
+        return emp;
+    });
+
     res.json(employeesWithTotals);
 });
 
-// Obtener un empleado por su ID
+// --- FUNCIÓN 2: Obtener un empleado por su ID ---
 const getEmployeeById = asyncHandler(async (req, res) => {
-    const employeeId = req.params.id;
-    const employee = await Employee.findById(employeeId).populate('user', 'username');
+    const { id } = req.params;
+    const employee = await Employee.findById(id).populate('user', 'username');
+
     if (!employee) {
         res.status(404);
         throw new Error('Empleado no encontrado');
     }
+
+    // Lógica de permisos
     if (req.user.role === 'cliente' || req.user.role === 'auxiliar') {
-        let clientProfile = null;
-        if (req.user.role === 'cliente') {
-            clientProfile = await Client.findOne({ user: req.user.id });
-        } else if (req.user.role === 'auxiliar') {
-            clientProfile = await Client.findById(req.user.associatedClient);
-        }
-        if (!clientProfile) {
-            res.status(404);
-            throw new Error('Perfil de cliente no encontrado o no autorizado.');
-        }
-        const employeeBelongsToClient = clientProfile.employees.some(empId => empId.toString() === employee._id.toString());
-        if (!employeeBelongsToClient) {
+        const clientProfile = req.user.role === 'cliente'
+            ? await Client.findOne({ user: req.user.id })
+            : await Client.findById(req.user.associatedClient);
+
+        if (!clientProfile || !clientProfile.employees.some(empId => empId.equals(employee._id))) {
             res.status(403);
-            throw new Error('No tienes permiso para ver este empleado.');
+            throw new Error('No tienes permiso para ver los registros de este empleado.');
         }
     }
+    // Si es 'admin', tiene acceso por defecto y pasa.
+
     res.json(employee);
 });
 
-// =================================================================
-// ===== INICIO DE LA FUNCIÓN CORREGIDA ============================
-// =================================================================
-
-// Crear un empleado por un cliente o auxiliar (VERSIÓN FINAL CORREGIDA)
+// --- FUNCIÓN 3: Crear un empleado por un cliente ---
 const createEmployeeByClient = asyncHandler(async (req, res) => {
-    const { fullName, idCard, phone } = req.body;
-
+    const { fullName, idCard, phone, clientId } = req.body;
     if (!fullName || !idCard || !phone) {
-        res.status(400);
-        throw new Error('Por favor, proporciona nombre completo, cédula y teléfono.');
+        res.status(400).json({ message: 'Nombre, cédula y teléfono son requeridos.' });
+        return;
     }
     
     try {
         let clientProfile;
-        if (req.user.role === 'cliente') {
+        if (req.user.role === 'admin' && clientId) {
+            clientProfile = await Client.findById(clientId).populate('employees');
+        } else if (req.user.role === 'cliente') {
             clientProfile = await Client.findOne({ user: req.user.id }).populate('employees');
         } else if (req.user.role === 'auxiliar') {
             clientProfile = await Client.findById(req.user.associatedClient).populate('employees');
@@ -69,7 +79,7 @@ const createEmployeeByClient = asyncHandler(async (req, res) => {
 
         if (!clientProfile) {
             res.status(404);
-            throw new Error('No se encontró un perfil de cliente asociado para realizar esta acción.');
+            throw new Error('No se encontró un perfil de cliente asociado.');
         }
         
         const employeeExists = clientProfile.employees.some(emp => emp.idCard === idCard);
@@ -78,17 +88,15 @@ const createEmployeeByClient = asyncHandler(async (req, res) => {
             throw new Error('Ya has registrado un empleado con esa cédula.');
         }
 
-        // === INICIO DE LA CORRECCIÓN ===
-        // Aquí debes incluir el 'user' ID del cliente en el nuevo perfil de empleado
         const employee = await Employee.create({
             fullName,
             idCard,
             phone,
             role: 'empleado',
             employeeType: 'cliente',
-            user: req.user.id, // <-- Esta es la línea que falta
+            // ✅ CORRECCIÓN: Asigna el ID del CLIENTE, no del auxiliar
+            user: clientProfile.user 
         });
-        // === FIN DE LA CORRECCIÓN ===
 
         clientProfile.employees.push(employee._id);
         await clientProfile.save();
@@ -96,17 +104,29 @@ const createEmployeeByClient = asyncHandler(async (req, res) => {
 
     } catch (err) {
         console.error("Error en createEmployeeByClient:", err);
-        res.status(500);
+        // Si el error sigue siendo de duplicado, es por el índice en la DB
+        if (err.code === 11000) {
+            throw new Error('Error de duplicado. Asegúrate de haber eliminado el índice "user_1" de la colección "employees" en la base de datos.');
+        }
         throw new Error('Error interno al crear el perfil del empleado.');
     }
 });
 
-// =================================================================
-// ===== FIN DE LA FUNCIÓN CORREGIDA ===============================
-// =================================================================
+// --- FUNCIÓN 4: Búsqueda de empleados ---
+const searchEmployees = asyncHandler(async (req, res) => {
+    try {
+        const searchQuery = req.query.q || '';
+        const employees = await Employee.find({
+            fullName: { $regex: searchQuery, $options: 'i' },
+            role: 'repartidor'
+        }).limit(10);
+        res.json(employees);
+    } catch (error) {
+        res.status(500).json({ message: 'Error en la búsqueda de empleados' });
+    }
+});
 
-
-// Eliminar un empleado (cliente o admin)
+// --- FUNCIÓN 5: Eliminar un empleado ---
 const deleteEmployee = asyncHandler(async (req, res) => {
     const { id } = req.params;
     const authenticatedUser = req.user;
@@ -134,9 +154,11 @@ const deleteEmployee = asyncHandler(async (req, res) => {
     res.status(200).json({ message: 'Mensajero eliminado con éxito.' });
 });
 
+// --- EXPORTACIÓN FINAL ---
 module.exports = {
     getAllEmployees,
     getEmployeeById,
     createEmployeeByClient,
     deleteEmployee,
+    searchEmployees,
 };

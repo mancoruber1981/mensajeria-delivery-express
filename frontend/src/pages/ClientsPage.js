@@ -1,8 +1,4 @@
-// ====================
-// Página: Dashboard Cliente
-// Componente: DashboardClientePage
-// Descripción: Vista principal para el cliente con gestión de mensajeros, tarifas y reportes.
-// ====================
+// Bloque 1: Importaciones/ClientPage,js/pagina espejo desde el admin 
 
 import React, { useState, useEffect } from 'react';
 import API from '../api/api';
