@@ -5,58 +5,55 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 
 const userSchema = mongoose.Schema({
-     // DENTRO DE userSchema en User.js
-
+    username: {
+        type: String,
+        required: true,
+        unique: true
+    },
     email: {
         type: String,
-        required: false, // <-- CAMBIO 1: Ya no es obligatorio
+        required: false,
         unique: true,
-        sparse: true,    // <-- CAMBIO 2: Permite que haya muchos usuarios sin email sin causar un error de duplicado
+        sparse: true, // Esto es correcto, permite multiples usuarios sin email
         match: [/.+@.+\..+/, 'Por favor, ingresa un email válido']
     },
-    // ▲▲▲ FIN DEL BLOQUE A AÑADIR ▲▲▲
-
     password: {
         type: String,
         required: true
+        // El campo duplicado ha sido eliminado
     },
-    username: {
-        type: String,
-        required: true,
-        unique: true
-    },
-    password: {
-        type: String,
-        required: true
-    },
-    role: {
-        type: String,
-        required: true,
-        enum: ['admin', 'repartidor', 'cliente', 'contador', 'auxiliar'],
-        default: 'repartidor'
-    },
-    // --- CAMPO NUEVO Y CRUCIAL ---
-    status: {
-        type: String,
-        enum: ['pendiente', 'activo', 'rechazado'],
-        default: 'pendiente'
-    },
-    // ----------------------------
-    profile: {
-        type: mongoose.Schema.Types.ObjectId,
-        refPath: 'roleDiscriminator',
-    },
-    roleDiscriminator: {
-        type: String,
-        enum: ['Employee', 'Client', 'admin', 'contador', 'auxiliar']
-    },
-    associatedClient: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'Client',
-        required: function() { return this.role === 'auxiliar'; }
-    }
+    role: {
+        type: String,
+        required: true,
+        enum: ['admin', 'repartidor', 'cliente', 'contador', 'auxiliar'],
+        default: 'repartidor'
+    },
+    status: {
+        type: String,
+        enum: ['pendiente', 'activo', 'rechazado'],
+        default: 'pendiente'
+    },
+    profile: {
+        type: mongoose.Schema.Types.ObjectId,
+        refPath: 'roleDiscriminator',
+    },
+    roleDiscriminator: {
+        type: String,
+        enum: ['Employee', 'Client', 'admin', 'contador', 'auxiliar']
+    },
+    associatedClient: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Client',
+        required: function() { return this.role === 'auxiliar'; }
+    },
+
+    // --- CAMPOS PARA RESETEO DE CONTRASEÑA AÑADIDOS ---
+    resetPasswordToken: String,
+    resetPasswordExpire: Date,
+    // ---------------------------------------------------
+
 }, {
-    timestamps: true
+    timestamps: true
 });
 
 // Middleware para hashear la contraseña antes de guardar

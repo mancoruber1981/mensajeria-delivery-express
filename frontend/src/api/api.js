@@ -1,11 +1,13 @@
-// frontend/src/api/api.js 
- import axios from 'axios'; 
- const API = axios.create({ 
-     baseURL: process.env.REACT_APP_API_URL || 'http://localhost:5000/api', 
-     headers: { 
-         'Content-Type': 'application/json', 
-     }, 
- }); 
+// frontend/src/api/api.js
+
+import axios from 'axios';
+
+// Creamos la instancia de axios SIN baseURL para que el proxy de package.json funcione
+const API = axios.create({
+  baseURL: 'http://localhost:5000' // <-- O el puerto donde esté corriendo TU backend (5000, 5001, etc.)
+});
+ 
+
 
  // Interceptor para añadir el token JWT a cada solicitud saliente. 
  // Esto asegura que todas las peticiones a la API estén autenticadas 

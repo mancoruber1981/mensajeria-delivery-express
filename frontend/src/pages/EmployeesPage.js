@@ -15,7 +15,7 @@ const EmployeesPage = () => {
     useEffect(() => {
         const fetchEmployees = async () => {
             try {
-                const res = await API.get('/employees');
+                const res = await API.get('/api/employees');
                 setEmployees(res.data);
             } catch (err) {
                 toast.error('Error al cargar la lista de empleados.');
@@ -77,8 +77,6 @@ const EmployeesPage = () => {
                     </table>
                 </div>
             )}
-
-            {/* ... (tu código para el modal si lo usas) ... */}
         </div>
     );
 };

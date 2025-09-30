@@ -8,7 +8,7 @@ const Navbar = () => {
     const [menuAbierto, setMenuAbierto] = useState(false);
     const cerrarMenu = () => setMenuAbierto(false);
 
-    return (
+     return (
         <nav className={`navbar ${menuAbierto ? 'open' : ''}`}>
             <div className="navbar-brand">
                 <Link to="/" onClick={cerrarMenu}>Mensajería Delivery Express S.A.S.</Link>
@@ -23,49 +23,18 @@ const Navbar = () => {
                                 <li><Link to="/dashboard-admin" onClick={cerrarMenu}>Dashboard Admin</Link></li>
                                 <li><Link to="/admin/employees" onClick={cerrarMenu}>Empleados</Link></li>
                                 <li><Link to="/admin/clients" onClick={cerrarMenu}>Clientes</Link></li>
-                                <li><Link to="/admin/loans" onClick={cerrarMenu}>Préstamos</Link></li>
+                                <li><Link to="/loans" onClick={cerrarMenu}>Préstamos</Link></li>
+                                <li><Link to="/admin/expenses" onClick={cerrarMenu}>Gastos</Link></li>
                                 <li><Link to="/admin/approve-users" onClick={cerrarMenu}>Aprobar Usuarios</Link></li>
                             </>
                         )}
                         {user.role === 'repartidor' && (
                             <>
-                                {/* ✅ ENLACE "MI SALDO" ELIMINADO */}
-                                <li><Link to="/admin/loans" onClick={cerrarMenu}>Préstamos</Link></li>
+                                <li><Link to="/loans" onClick={cerrarMenu}>Préstamos</Link></li>
                             </>
                         )}
                         <li><span className="welcome-message">Bienvenido, {user.username} ({user.role})</span></li>
                         <li><button onClick={logout} className="logout-button">Cerrar Sesión</button></li>
-                    </>
-                ) : (
-                    <>
-                        <li><Link to="/login" onClick={cerrarMenu}>Iniciar Sesión</Link></li>
-                        <li><Link to="/register" onClick={cerrarMenu}>Registrarse</Link></li>
-                    </>
-                )}
-            </ul>
-
-            <button className="hamburger" onClick={() => setMenuAbierto(!menuAbierto)}>☰</button>
-
-            {/* Menú para Móvil */}
-            <ul className="mobile-nav">
-                {user ? (
-                    <>
-                        {user.role === 'admin' && (
-                            <>
-                                <li><Link to="/admin-dashboard" onClick={cerrarMenu}>Dashboard Admin</Link></li>
-                                <li><Link to="/admin/employees" onClick={cerrarMenu}>Empleados</Link></li>
-                                <li><Link to="/admin/clients" onClick={cerrarMenu}>Clientes</Link></li>
-                                <li><Link to="/admin/loans" onClick={cerrarMenu}>Préstamos</Link></li>
-                                <li><Link to="/admin/approve-users" onClick={cerrarMenu}>Aprobar Usuarios</Link></li>
-                            </>
-                        )}
-                        {user.role === 'repartidor' && (
-                            <>
-                                {/* ✅ ENLACE "MI SALDO" ELIMINADO */}
-                                <li><Link to="/admin/loans" onClick={cerrarMenu}>Préstamos</Link></li>
-                            </>
-                        )}
-                        <li><button onClick={() => { logout(); cerrarMenu(); }} className="logout-button">Cerrar Sesión</button></li>
                     </>
                 ) : (
                     <>

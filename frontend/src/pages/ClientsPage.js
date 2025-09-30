@@ -25,7 +25,7 @@ const ClientsPage = () => {
                 return;
             }
             try {
-                const res = await API.get('/clients');
+                const res = await API.get('/api/clients');
                 setClients(res.data);
                 setLoading(false);
             } catch (err) {
@@ -40,6 +40,11 @@ const ClientsPage = () => {
     // Bloque 4: Renderizado Condicional de Carga y Error
     if (loading) return <LoadingSpinner />;
     if (error) return <div className="error-message">{error}</div>;
+
+    // Lógica para calcular el total a cobrar de todos los clientes
+const totalGeneralACobrar = clients.reduce((acc, client) => {
+    return acc + (client.totalACobrar || 0);
+}, 0);
 
     // Bloque 5: Renderizado del Componente (JSX)
 return (
@@ -101,6 +106,12 @@ return (
                         ))}
                     </tbody>
                 </table>
+<div className="totals-summary-box">
+    <div className="total-item grand-total">
+        <span className="total-label">Total General a Cobrar (Todos los Clientes):</span>
+        <span className="total-value">${totalGeneralACobrar.toLocaleString('es-CO')}</span>
+    </div>
+</div>
             </div>
         )}
     </div>

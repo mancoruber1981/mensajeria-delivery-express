@@ -110,7 +110,6 @@ const settleFortnight = asyncHandler(async (req, res) => {
 const settleFortnightForEmployee = asyncHandler(async (req, res) => {
     const { employeeId } = req.params;
     const { deductSocialSecurity } = req.body;
-
     const today = new Date();
     let startDate, endDate;
     if (today.getDate() <= 15) {
@@ -120,103 +119,91 @@ const settleFortnightForEmployee = asyncHandler(async (req, res) => {
         startDate = new Date(Date.UTC(today.getFullYear(), today.getMonth(), 16));
         endDate = new Date(Date.UTC(today.getFullYear(), today.getMonth() + 1, 1));
     }
-
-    const unpaidLogs = await TimeLog.find({
-        employee: employeeId,
-        date: { $gte: startDate, $lt: endDate },
-        isPaid: false
-    });
-
+    const unpaidLogs = await TimeLog.find({ employee: employeeId, isPaid: false });
     if (unpaidLogs.length === 0) {
         return res.status(200).json({ message: 'Este empleado no tiene registros pendientes para liquidar.' });
     }
-
-    let grossSettlementAmount = unpaidLogs.reduce((acc, log) => acc + log.valorNetoFinal, 0);
+    const grossSettlementAmount = unpaidLogs.reduce((acc, log) => acc + log.valorNetoFinal, 0);
     const logIds = unpaidLogs.map(log => log._id);
-    let finalNetAmount = grossSettlementAmount;
-    
-    const activeLoan = await Loan.findOne({ employee: employeeId, status: 'Aprobado' });
     let loanRepaymentAmount = 0;
-    if (activeLoan) {
+    let socialSecurityAmount = 0;
+    const activeLoan = await Loan.findOne({ employee: employeeId, status: 'Aprobado' });
+    if (activeLoan && activeLoan.outstandingBalance > 0) {
         loanRepaymentAmount = Math.min(activeLoan.amount / activeLoan.installments, activeLoan.outstandingBalance);
-        finalNetAmount -= loanRepaymentAmount;
     }
-
     if (deductSocialSecurity) {
-        finalNetAmount -= 95000; // Asumiendo valor fijo
+        socialSecurityAmount = 95000;
     }
-
-    await Settlement.create({
+    const finalNetAmount = grossSettlementAmount - loanRepaymentAmount - socialSecurityAmount;
+    const newSettlement = await Settlement.create({
         entity: employeeId,
         entityModel: 'Employee',
         startDate: startDate,
         endDate: new Date(endDate.getTime() - 1),
+        grossAmount: grossSettlementAmount,
+        loanDeduction: loanRepaymentAmount,
+        socialSecurityDeduction: socialSecurityAmount,
         totalAmount: finalNetAmount,
         timeLogs: logIds
     });
-
     if (activeLoan) {
         activeLoan.outstandingBalance -= loanRepaymentAmount;
-        activeLoan.repayments.push({ amount: loanRepaymentAmount, settlementId: settlement._id }); // Guardar referencia
+        activeLoan.repayments.push({ amount: loanRepaymentAmount, settlementId: newSettlement._id });
         if (activeLoan.outstandingBalance <= 0) {
+            activeLoan.outstandingBalance = 0;
             activeLoan.status = 'Pagado';
         }
         await activeLoan.save();
     }
-    
     await TimeLog.updateMany({ _id: { $in: logIds } }, { $set: { isPaid: true, estado: 'PAGADO', paymentDate: new Date() } });
-    await Employee.findByIdAndUpdate(employeeId, { $inc: { currentBalance: -grossSettlementAmount } });
-
     res.status(200).json({ message: `Liquidación individual completada.` });
 });
 
 const getSettlementPreview = asyncHandler(async (req, res) => {
     const { employeeId } = req.params;
 
-    const today = new Date();
-    let startDate, endDate;
-    if (today.getDate() <= 15) {
-        startDate = new Date(Date.UTC(today.getFullYear(), today.getMonth(), 1));
-        endDate = new Date(Date.UTC(today.getFullYear(), today.getMonth(), 16));
-    } else {
-        startDate = new Date(Date.UTC(today.getFullYear(), today.getMonth(), 16));
-        endDate = new Date(Date.UTC(today.getFullYear(), today.getMonth() + 1, 1));
-    }
-
+    // 1. Encontrar todos los registros pendientes de pago (sin filtro de fecha)
     const unpaidLogs = await TimeLog.find({
         employee: employeeId,
-        date: { $gte: startDate, $lt: endDate },
         isPaid: false
     });
 
-    const grossTotal = unpaidLogs.reduce((acc, log) => acc + log.valorNetoFinal, 0);
-    
+    if (unpaidLogs.length === 0) {
+        return res.status(404).json({ message: 'No hay registros pendientes para previsualizar.' });
+    }
+
+    // 2. Calcular el total bruto sumando el valor neto final de cada registro
+    const grossTotal = unpaidLogs.reduce((acc, log) => acc + (log.valorNetoFinal || 0), 0);
+
+    // 3. Buscar si hay un préstamo activo para calcular el descuento
     const activeLoan = await Loan.findOne({ employee: employeeId, status: 'Aprobado' });
     let loanRepayment = 0;
-    if (activeLoan) {
+    if (activeLoan && activeLoan.outstandingBalance > 0) {
+        // Calcula la cuota del préstamo
         loanRepayment = Math.min(activeLoan.amount / activeLoan.installments, activeLoan.outstandingBalance);
     }
     
+    // 4. Definir el valor de la seguridad social (puedes ajustarlo si es dinámico)
     const socialSecurityDeduction = 95000;
-    const finalTotal = grossTotal - loanRepayment - socialSecurityDeduction;
 
-    res.json({
+    // 5. Enviar el objeto con todos los cálculos al frontend
+    res.status(200).json({
         grossTotal,
         loanRepayment,
-        socialSecurityDeduction,
-        finalTotal
+        socialSecurityDeduction
     });
 });
 
-// En backend/controllers/adminController.js
 
 const settleClientTotal = asyncHandler(async (req, res) => {
     const { clientId } = req.params;
     const client = await Client.findById(clientId);
-    if (!client) { throw new Error('Cliente no encontrado.'); }
+    if (!client) { 
+        res.status(404);
+        throw new Error('Cliente no encontrado.'); 
+    }
     const employeeIds = client.employees;
 
-    // Busca TODOS los registros no pagados de los empleados de este cliente
     const unpaidLogs = await TimeLog.find({
         employee: { $in: employeeIds },
         isPaid: false
@@ -231,16 +218,20 @@ const settleClientTotal = asyncHandler(async (req, res) => {
     const startDate = unpaidLogs.reduce((min, log) => log.date < min ? log.date : min, unpaidLogs[0].date);
     const endDate = unpaidLogs.reduce((max, log) => log.date > max ? log.date : max, unpaidLogs[0].date);
 
-
+    // --- BLOQUE DE CREACIÓN CORREGIDO Y COMPLETO ---
     await Settlement.create({
         entity: clientId,
         entityModel: 'Client',
         startDate: startDate,
-        endDate: new Date(endDate.getTime() - 1),
-        totalAmount: totalAmount,
+        endDate: endDate, // Usamos la fecha final real del último registro
+        grossAmount: totalAmount,             // CAMBIO: Añadido el monto bruto
+        loanDeduction: 0,                   // CAMBIO: Añadido explícitamente como 0
+        socialSecurityDeduction: 0,         // CAMBIO: Añadido explícitamente como 0
+        totalAmount: totalAmount,             // El neto y el bruto son iguales para el cliente
         timeLogs: logIds
     });
-    // Marca TODOS los registros liquidados como pagados para que no se vuelvan a sumar
+    
+    // Marcamos los registros como pagados
     await TimeLog.updateMany(
         { _id: { $in: logIds } },
         { $set: { isPaid: true, estado: 'PAGADO', paymentDate: new Date() } }
@@ -550,6 +541,202 @@ const deleteAuxiliaryByAdmin = asyncHandler(async (req, res) => {
     res.status(200).json({ message: 'Auxiliar eliminado con éxito por el administrador.' });
 });
 
+// en backend/controllers/adminController.js
+
+// Al principio del archivo, junto a tus otras importaciones, asegúrate de tener esta:
+const ExcelJS = require('exceljs');
+
+const getEmployeeSettlementReport = asyncHandler(async (req, res) => {
+    const { employeeId } = req.params;
+    const { startDate, endDate, includeSS } = req.query; // <-- 1. RECIBIMOS LA NUEVA OPCIÓN
+
+    if (!startDate || !endDate) {
+        res.status(400);
+        throw new Error('Por favor, proporciona una fecha de inicio y de fin para el reporte.');
+    }
+
+    const start = new Date(startDate);
+    start.setUTCHours(0, 0, 0, 0);
+    const end = new Date(endDate);
+    end.setUTCHours(23, 59, 59, 999);
+
+    const employee = await Employee.findById(employeeId).lean();
+    if (!employee) {
+        res.status(404);
+        throw new Error('Mensajero no encontrado.');
+    }
+
+    const timeLogs = await TimeLog.find({
+        employee: employeeId,
+        date: { $gte: start, $lte: end }
+    }).sort({ date: 1 }).lean();
+
+    if (timeLogs.length === 0) {
+        return res.status(404).json({ message: 'No se encontraron registros para este mensajero en el período seleccionado.' });
+    }
+
+    const activeLoan = await Loan.findOne({ employee: employeeId, status: 'Aprobado' }).lean();
+    
+    const workbook = new ExcelJS.Workbook();
+    // ... (creación del workbook sin cambios)
+    const summarySheet = workbook.addWorksheet('Resumen');
+    
+    // --- CÁLCULOS MEJORADOS ---
+    const totalBrutoServicios = timeLogs.reduce((acc, log) => acc + log.valorNetoFinal, 0);
+    
+    let descuentoPrestamo = 0;
+    if (activeLoan) {
+        descuentoPrestamo = Math.min(activeLoan.amount / activeLoan.installments, activeLoan.outstandingBalance);
+    }
+    
+    // --- 2. LÓGICA CONDICIONAL PARA EL DESCUENTO ---
+    let descuentoSeguridadSocial = 0;
+    if (includeSS === 'true') { // El parámetro llega como texto 'true' o 'false'
+        descuentoSeguridadSocial = 95000;
+    }
+    
+    const totalNetoAPagar = totalBrutoServicios - descuentoPrestamo - descuentoSeguridadSocial;
+
+    // --- DISEÑO DEL RESUMEN ACTUALIZADO ---
+    summarySheet.mergeCells('A1:D1');
+    summarySheet.getCell('A1').value = `REPORTE DE SERVICIOS - ${employee.fullName}`;
+    summarySheet.getCell('A1').font = { bold: true, size: 16 };
+    summarySheet.getCell('A3').value = 'Periodo:';
+    summarySheet.getCell('B3').value = `${start.toISOString().slice(0,10)} al ${end.toISOString().slice(0,10)}`;
+    
+    summarySheet.getCell('A5').value = 'Subtotal Servicios (Neto):';
+    summarySheet.getCell('B5').value = totalBrutoServicios;
+    summarySheet.getCell('B5').numFmt = '$ #,##0.00';
+    
+    summarySheet.getCell('A6').value = '(-) Descuento Préstamo:';
+    summarySheet.getCell('B6').value = descuentoPrestamo;
+    summarySheet.getCell('B6').numFmt = '$ #,##0.00';
+
+    summarySheet.getCell('A7').value = '(-) Seg. Social (Estimado):';
+    summarySheet.getCell('B7').value = descuentoSeguridadSocial;
+    summarySheet.getCell('B7').numFmt = '$ #,##0.00';
+
+    summarySheet.getCell('A8').value = 'TOTAL NETO DEL PERIODO:';
+    summarySheet.getCell('A8').font = { bold: true };
+    summarySheet.getCell('B8').value = totalNetoAPagar;
+    summarySheet.getCell('B8').font = { bold: true };
+    summarySheet.getCell('B8').numFmt = '$ #,##0.00';
+    
+    summarySheet.getColumn('A').width = 35;
+    summarySheet.getColumn('B').width = 20;
+
+    // --- HOJA DE DETALLE (Sin cambios en su estructura) ---
+    const detailsSheet = workbook.addWorksheet('Detalle de Registros');
+    detailsSheet.columns = [
+        { header: 'Fecha', key: 'date', width: 15, style: { numFmt: 'dd/mm/yyyy' } },
+        { header: 'Empresa', key: 'empresa', width: 25 },
+        { header: 'Subtotal', key: 'subtotal', width: 18, style: { numFmt: '$ #,##0.00' } },
+        { header: 'Desc. Almuerzo', key: 'descuentoAlmuerzo', width: 18, style: { numFmt: '$ #,##0.00' } },
+        { header: 'Deducción Préstamo (Individual)', key: 'totalLoanDeducted', width: 18, style: { numFmt: '$ #,##0.00' } },
+        { header: 'Valor Neto Final', key: 'valorNetoFinal', width: 18, style: { numFmt: '$ #,##0.00' } },
+        { header: 'Estado', key: 'estado', width: 15 },
+    ];
+    
+    const detailsData = timeLogs.map(log => ({
+        date: new Date(log.date),
+        empresa: log.empresa,
+        subtotal: log.subtotal,
+        descuentoAlmuerzo: log.descuentoAlmuerzo,
+        totalLoanDeducted: log.totalLoanDeducted,
+        valorNetoFinal: log.valorNetoFinal,
+        estado: log.isPaid ? 'Pagado' : 'Pendiente'
+    }));
+    detailsSheet.addRows(detailsData);
+    
+    // Autosuma (Sin cambios)
+    const dataRowCount = detailsData.length;
+    if (dataRowCount > 0) {
+        const totalRow = detailsSheet.addRow([]);
+        const totalsLabelCell = totalRow.getCell('E');
+        totalsLabelCell.value = 'TOTAL:';
+        totalsLabelCell.font = { bold: true };
+        totalsLabelCell.alignment = { horizontal: 'right' };
+        const totalsValueCell = totalRow.getCell('F');
+        totalsValueCell.value = { formula: `SUM(F2:F${1 + dataRowCount})` };
+        totalsValueCell.font = { bold: true };
+        totalsValueCell.numFmt = '$ #,##0.00';
+    }
+
+    const fileName = `Reporte_${employee.fullName.replace(/\s/g, '_')}_${start.toISOString().slice(0,10)}.xlsx`;
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename=${fileName}`);
+    await workbook.xlsx.write(res);
+    res.end();
+});
+const getOwnSettlementReport = asyncHandler(async (req, res) => {
+    const employeeId = req.user.profile; // Obtenemos el ID del propio usuario logueado
+    const { startDate, endDate } = req.query;
+
+    if (!startDate || !endDate) {
+        res.status(400);
+        throw new Error('Por favor, proporciona una fecha de inicio y de fin.');
+    }
+
+    const start = new Date(startDate);
+    start.setUTCHours(0, 0, 0, 0);
+    const end = new Date(endDate);
+    end.setUTCHours(23, 59, 59, 999);
+
+    const settlements = await Settlement.find({
+        entity: employeeId,
+        createdAt: { $gte: start, $lte: end }
+    }).lean();
+
+    if (settlements.length === 0) {
+        return res.status(404).json({ message: 'No se encontraron liquidaciones para ti en el período seleccionado.' });
+    }
+
+    const timeLogIds = settlements.flatMap(s => s.timeLogs);
+    const timeLogsDetails = await TimeLog.find({ _id: { $in: timeLogIds } }).sort({ date: 1 }).lean();
+
+    const workbook = new ExcelJS.Workbook();
+    const detailsSheet = workbook.addWorksheet('Detalle de Registros');
+
+    detailsSheet.columns = [
+        { header: 'Fecha', key: 'date', width: 15, style: { numFmt: 'dd/mm/yyyy' } },
+        { header: 'Empresa', key: 'empresa', width: 25 },
+        { header: 'Día Festivo', key: 'diaFestivo', width: 12 },
+        { header: 'Hora Inicio', key: 'horaInicio', width: 12 },
+        { header: 'Hora Fin', key: 'horaFin', width: 12 },
+        { header: 'Subtotal', key: 'subtotal', width: 18, style: { numFmt: '$ #,##0.00' } },
+        { header: 'Desc. Almuerzo', key: 'descuentoAlmuerzo', width: 18, style: { numFmt: '$ #,##0.00' } },
+        { header: 'Valor Neto Inicial', key: 'valorNetoInicial', width: 18, style: { numFmt: '$ #,##0.00' } },
+        { header: 'Valor Neto Final', key: 'valorNetoFinal', width: 18, style: { numFmt: '$ #,##0.00' } },
+        { header: 'Estado', key: 'estado', width: 15 },
+    ];
+
+    const detailsData = timeLogsDetails.map(log => ({
+        date: new Date(log.date), empresa: log.empresa, diaFestivo: log.festivo ? 'Sí' : 'No',
+        horaInicio: log.horaInicio, horaFin: log.horaFin, subtotal: log.subtotal,
+        descuentoAlmuerzo: log.descuentoAlmuerzo, valorNetoInicial: log.valorNetoInicial,
+        valorNetoFinal: log.valorNetoFinal, estado: log.estado
+    }));
+    detailsSheet.addRows(detailsData);
+
+    const totalRow = detailsSheet.addRow([]);
+    const lastDataRow = detailsSheet.lastRow.number - 1;
+    const totalsLabelCell = totalRow.getCell('H');
+    totalsLabelCell.value = 'TOTAL:';
+    totalsLabelCell.font = { bold: true };
+    totalsLabelCell.alignment = { horizontal: 'right' };
+
+    const totalsValueCell = totalRow.getCell('I');
+    totalsValueCell.value = { formula: `SUM(I2:I${lastDataRow})` }; 
+    totalsValueCell.font = { bold: true };
+    totalsValueCell.numFmt = '$ #,##0.00';
+
+    const fileName = `MiReporte_${start.toISOString().slice(0,10)}.xlsx`;
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename=${fileName}`);
+    await workbook.xlsx.write(res);
+    res.end();
+});
+
 
 module.exports = {
     getDashboardStats,
@@ -565,5 +752,7 @@ module.exports = {
     approveUser,
     exportClientDataForAdmin,
     createAuxiliaryForClient,
-    deleteAuxiliaryByAdmin
+    deleteAuxiliaryByAdmin,
+    getEmployeeSettlementReport,
+     getOwnSettlementReport
 };

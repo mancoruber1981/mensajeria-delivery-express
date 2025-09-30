@@ -46,6 +46,16 @@ const clientSchema = mongoose.Schema({
         required: true
     },
 
+email: {
+        type: String,
+        required: [true, 'Por favor, añade un correo electrónico.'],
+        unique: true,
+        match: [
+            /^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/,
+            'Por favor, añade un correo electrónico válido.'
+        ]
+    },
+
     defaultHourlyRate: { // Tarifa horaria normal por defecto
         type: Number,
         required: false,

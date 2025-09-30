@@ -50,6 +50,38 @@ const TimeEntriesPage = () => {
     const [subtotal, setSubtotal] = useState(0);
     const [valorNeto, setValorNeto] = useState(0);
     const [valorFinalConDeducciones, setValorFinalConDeducciones] = useState(0);
+    const [showSettlementModal, setShowSettlementModal] = useState(false);
+    const [settlementDetails, setSettlementDetails] = useState(null);
+    const [deductSS, setDeductSS] = useState(true);
+
+    const handleOpenSettlementModal = async () => {
+        setLoading(true);
+        try {
+            const { data } = await API.get(`/admin/preview-settlement/${employeeId}`);
+            setSettlementDetails(data);
+            setShowSettlementModal(true);
+        } catch (err) {
+            toast.error(err.response?.data?.message || "Error al obtener los datos de liquidación.");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleConfirmSettlement = async () => {
+        try {
+            setLoading(true);
+            const { data } = await API.post(`/admin/settle-fortnight/${employeeId}`, {
+                deductSocialSecurity: deductSS
+            });
+            toast.success(data.message);
+            setShowSettlementModal(false);
+           fetchData() // Esta función ya existe en tu archivo, así que funcionará
+        } catch (err) {
+            toast.error(err.response?.data?.message || "Error al confirmar la liquidación.");
+        } finally {
+            setLoading(false);
+        }
+    };
 
 // Bloque 3: Función de Recálculo de Totales
     const recalculateTotals = useCallback((data) => {
@@ -98,15 +130,15 @@ const TimeEntriesPage = () => {
         if (!employeeId || !user) return;
         try {
             setLoading(true);
-            const employeeRes = await API.get(`/employees/${employeeId}`);
+            const employeeRes = await API.get(`/api/employees/${employeeId}`);
             setEmployeeName(employeeRes.data.fullName);
 
-            const logsRes = await API.get(`/timelogs/employee/${employeeId}`);
+            const logsRes = await API.get(`/api/timelogs/employee/${employeeId}`);
             setTimeLogs(logsRes.data);
 
             if (user.role === 'cliente' || user.role === 'auxiliar') {
                 const clientId = user.role === 'cliente' ? user.profile._id : user.associatedClient;
-                const clientRes = await API.get(`/clients/${clientId}`);
+                const clientRes = await API.get(`/api/clients/${clientId}`);
                 const defaultRate = clientRes.data.defaultHourlyRate?.toString() || '0';
                 
                 setClientRates({
@@ -230,10 +262,10 @@ const TimeEntriesPage = () => {
 
         try {
             if (editingLog) {
-                await API.put(`/timelogs/${editingLog._id}`, dataToSend);
+                await API.put(`/api/timelogs/${editingLog._id}`, dataToSend);
                 toast.success('Registro actualizado con éxito');
             } else {
-                await API.post('/timelogs', dataToSend);
+                await API.post('/api/timelogs', dataToSend);
                 toast.success('Registro guardado con éxito');
             }
             setFormData({
@@ -288,7 +320,7 @@ const TimeEntriesPage = () => {
     const handleDelete = async (logId) => {
         if (window.confirm('¿Estás seguro de que quieres eliminar este registro?')) {
             try {
-                await API.delete(`/timelogs/${logId}`);
+                await API.delete(`/api/timelogs/${logId}`);
                 toast.success('Registro eliminado con éxito.');
                 fetchData(); 
             } catch (err) {
@@ -296,6 +328,21 @@ const TimeEntriesPage = () => {
             }
         }
     };
+
+    const totals = timeLogs.reduce((acc, log) => {
+        const valorNetoInicial = log.valorNeto || 0;
+        const deduccion = log.totalLoanDeducted || 0;
+        
+        acc.totalValorNeto += valorNetoInicial;
+        acc.totalDeducciones += deduccion;
+        acc.totalFinal += (valorNetoInicial - deduccion);
+
+        return acc;
+    }, {
+        totalValorNeto: 0,
+        totalDeducciones: 0,
+        totalFinal: 0,
+    });
 
 // Bloque 11: Renderizado del Componente - Contenedor Principal
     return (
@@ -464,20 +511,63 @@ const TimeEntriesPage = () => {
                                                 <td>${((log.valorNeto || 0) - (log.totalLoanDeducted || 0)).toLocaleString('es-CO')}</td>
                                             </>
                                         )}
-                                        <td className="action-buttons">
-                                            {(isAdmin || ((isClient || isAuxiliar) && !log.isFixed)) && (
-                                                <>
-                                                    <button className="button-edit" onClick={() => handleEdit(log)}>Editar</button>
-                                                    <button className="button-delete" onClick={() => handleDelete(log._id)}>Eliminar</button>
-                                                </>
-                                            )}
-                                            {((isClient || isAuxiliar) && log.isFixed) && (
-                                                <span style={{ color: 'gray', fontSize: '0.8em' }}>Fijado</span>
-                                            )}
-                                        </td>
+                                       <td className="action-buttons">
+    {(isClient || isAuxiliar) && (
+        <>
+            {/* Si el registro NO está pagado, el cliente/auxiliar puede editarlo */}
+            {!log.isPaid ? (
+                <>
+                    <button className="button-edit" onClick={() => handleEdit(log)}>Editar</button>
+                    <button className="button-delete" onClick={() => handleDelete(log._id)}>Eliminar</button>
+                </>
+            ) : (
+                /* Si el registro YA está pagado, solo ven una etiqueta y no pueden hacer nada */
+                <span className="paid-badge">Liquidado</span>
+            )}
+        </>
+    )}
+</td>
                                     </tr>
                                 ))}
                             </tbody>
+
+                            {/* ========== INICIO: CÓDIGO A AÑADIR (PASO 2) ========== */}
+                            { !isAuxiliar && timeLogs.length > 0 && (
+                                <tfoot>
+                                    <tr>
+                                        <td colSpan="7" className="summary-label">Suma Valor Neto:</td>
+                                        <td className="summary-value">
+                                            {totals.totalValorNeto.toLocaleString('es-CO', {
+                                                style: 'currency',
+                                                currency: 'COP',
+                                            })}
+                                        </td>
+                                        <td></td> {/* Celda vacía para la columna de Acciones */}
+                                    </tr>
+                                    <tr>
+                                        <td colSpan="7" className="summary-label">Suma Deducciones:</td>
+                                        <td className="summary-value">
+                                            {totals.totalDeducciones.toLocaleString('es-CO', {
+                                                style: 'currency',
+                                                currency: 'COP',
+                                            })}
+                                        </td>
+                                        <td></td> {/* Celda vacía para la columna de Acciones */}
+                                    </tr>
+                                    <tr className="total-row">
+                                        <td colSpan="7" className="summary-label">Total Final:</td>
+                                        <td className="summary-value">
+                                            {totals.totalFinal.toLocaleString('es-CO', {
+                                                style: 'currency',
+                                                currency: 'COP',
+                                            })}
+                                        </td>
+                                        <td></td> {/* Celda vacía para la columna de Acciones */}
+                                    </tr>
+                                </tfoot>
+                            )}
+                            {/* ========== FIN: CÓDIGO A AÑADIR (PASO 2) ========== */}
+
                         </table>
                     </div>
                 ) : (

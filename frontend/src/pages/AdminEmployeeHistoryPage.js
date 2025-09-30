@@ -51,6 +51,7 @@ if (user) {
     const [isAuxiliar, setIsAuxiliar] = useState(false);
     const [isClient, setIsClient] = useState(false);
     const [isAdmin, setIsAdmin] = useState(false);
+    const [isRepartidor, setIsRepartidor] = useState(false);
     const [defaultHourlyRateForClient, setDefaultHourlyRateForClient] = useState('0');
     const [holidayHourlyRateForClient, setHolidayHourlyRateForClient] = useState('0');
     const [employeeName, setEmployeeName] = useState('Cargando...');
@@ -73,6 +74,13 @@ if (user) {
     const [subtotal, setSubtotal] = useState(0);
     const [valorNeto, setValorNeto] = useState(0);
     const [valorFinalConDeducciones, setValorFinalConDeducciones] = useState(0);
+    const [showSettlementModal, setShowSettlementModal] = useState(false);
+    const [settlementDetails, setSettlementDetails] = useState(null);
+    const [deductSS, setDeductSS] = useState(true);
+    const [reportStartDate, setReportStartDate] = useState('');
+    const [reportEndDate, setReportEndDate] = useState('');
+    const [isGeneratingReport, setIsGeneratingReport] = useState(false);
+    const [includeSSInReport, setIncludeSSInReport] = useState(true);
 
     // Bloque 6: Función de Recálculo de Totales (Lógica Corregida)
     const recalculateTotals = useCallback((data) => {
@@ -122,7 +130,7 @@ if (user) {
         if (!employeeId) return;
         try {
             setLoading(true);
-            const res = await API.get(`/timelogs/employee/${employeeId}`);
+            const res = await API.get(`/api/timelogs/employee/${employeeId}`);
             setTimeLogs(res.data);
         } catch (error) {
             toast.error(error.response?.data?.message || "No se pudo cargar el historial.");
@@ -143,6 +151,7 @@ useEffect(() => {
     setIsAuxiliar(user.role === 'auxiliar');
     setIsClient(user.role === 'cliente');
     setIsAdmin(user.role === 'admin');
+     setIsRepartidor(user.role === 'repartidor');
 
     // 2. Definimos la función para cargar los datos del empleado.
     const fetchData = async () => {
@@ -152,16 +161,16 @@ useEffect(() => {
         console.log("Intentando cargar historial para el ID:", employeeId);
 
         try {
-            const employeeRes = await API.get(`/employees/${employeeId}`);
+            const employeeRes = await API.get(`/api/employees/${employeeId}`);
             setEmployeeName(employeeRes.data.fullName);
-            const logsRes = await API.get(`/timelogs/employee/${employeeId}`);
+            const logsRes = await API.get(`/api/timelogs/employee/${employeeId}`);
             setTimeLogs(logsRes.data);
         } catch (error) {
             // AÑADE ESTA LÍNEA PARA VER EL ERROR
             console.error("¡La petición a la API falló!", error);
             
             toast.error("Error al cargar el historial del empleado.");
-            navigate('/admin/employees'); 
+            navigate('/api/admin/employees'); 
         } finally {
             setLoading(false); 
         }
@@ -277,10 +286,10 @@ useEffect(() => {
 
         try {
             if (editingLog) {
-                await API.put(`/timelogs/${editingLog._id}`, dataToSend);
+                await API.put(`/api/timelogs/${editingLog._id}`, dataToSend);
                 toast.success('Registro actualizado con éxito');
             } else {
-                await API.post('/timelogs', dataToSend);
+                await API.post('/api/timelogs', dataToSend);
                 toast.success('Registro guardado con éxito');
             }
             setFormData({
@@ -335,7 +344,7 @@ useEffect(() => {
     const handleDelete = async (logId) => {
         if (window.confirm('¿Estás seguro de que quieres eliminar este registro?')) {
             try {
-                await API.delete(`/timelogs/${logId}`);
+                await API.delete(`/api/timelogs/${logId}`);
                 toast.success('Registro eliminado con éxito.');
                 fetchTimeLogs();
             } catch (err) {
@@ -344,9 +353,150 @@ useEffect(() => {
         }
     };
 
+    const handleOpenSettlementModal = async () => {
+        setLoading(true);
+        try {
+            const { data } = await API.get(`/api/admin/preview-settlement/${employeeId}`);
+            setSettlementDetails(data);
+            setShowSettlementModal(true);
+        } catch (err) {
+            toast.error(err.response?.data?.message || "Error al obtener los datos de liquidación.");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleConfirmSettlement = async () => {
+        try {
+            setLoading(true);
+            const { data } = await API.post(`/api/admin/settle-fortnight/${employeeId}`, {
+                deductSocialSecurity: deductSS
+            });
+            toast.success(data.message);
+            setShowSettlementModal(false);
+            fetchTimeLogs(); // Llama a la función de refresco de este archivo
+        } catch (err) {
+            toast.error(err.response?.data?.message || "Error al confirmar la liquidación.");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleMarkAsPaid = async (logId) => {
+        if (!window.confirm('¿Estás seguro de que quieres marcar este registro como pagado?')) return;
+        try {
+           await API.put(`/api/timelogs/mark-paid/${logId}`);
+            toast.success('Registro marcado como pagado.');
+            fetchTimeLogs(); // Recargamos los datos para que se actualice la vista
+        } catch (err) {
+            toast.error(err.response?.data?.message || 'Error al marcar como pagado.');
+        }
+    };
+
+    // Función para liquidar todos los registros pendientes del empleado
+    const handleSettleFortnight = async () => {
+    const unpaidLogs = timeLogs.filter(log => !log.isPaid);
+    if (unpaidLogs.length === 0) {
+        toast.info('No hay registros pendientes para liquidar.');
+        return;
+    }
+
+    if (!window.confirm(`¿Estás seguro de que quieres liquidar ${unpaidLogs.length} registros pendientes para ${employeeName}? Esta acción no se puede deshacer.`)) return;
+
+    try {
+        // ========== LA LÍNEA CORREGIDA ESTÁ AQUÍ ==========
+        await API.post(`/api/admin/settle-fortnight/${employeeId}`);
+        // =================================================
+
+        toast.success(`Quincena de ${employeeName} liquidada con éxito.`);
+        fetchTimeLogs(); // Recargamos para ver todos los registros como pagados
+    } catch (err) {
+        toast.error(err.response?.data?.message || 'Error al liquidar la quincena.');
+    }
+};
+
      if (loading || authLoading) {
     return <LoadingSpinner />;
 }
+
+const totals = timeLogs.reduce((acc, log) => {
+        const valorNetoInicial = log.valorNeto || 0;
+        const deduccion = log.totalLoanDeducted || 0;
+        const valorNetoFinal = valorNetoInicial - deduccion;
+
+        acc.totalValorNeto += valorNetoInicial;
+        acc.totalDeducciones += deduccion;
+        acc.totalFinal += valorNetoFinal;
+
+        return acc;
+    }, {
+        totalValorNeto: 0,
+        totalDeducciones: 0,
+        totalFinal: 0,
+    });
+
+    // Pega esta función completa después de la función handleSettleFortnight
+
+// --- NUEVA FUNCIÓN PARA GENERAR Y DESCARGAR EL REPORTE ---
+const handleGenerateReport = async () => {
+    if (!reportStartDate || !reportEndDate) {
+        toast.error("Por favor, selecciona una fecha de inicio y de fin.");
+        return;
+    }
+    setIsGeneratingReport(true);
+    try {
+        const response = await API.get(`/api/admin/employee/${employeeId}/settlement-report`, {
+            params: {
+                startDate: reportStartDate,
+                endDate: reportEndDate,
+                includeSS: includeSSInReport // <-- PARÁMETRO NUEVO
+            },
+            responseType: 'blob',
+        });
+
+        // Lógica para descargar el archivo
+        const url = window.URL.createObjectURL(new Blob([response.data]));
+        const link = document.createElement('a');
+        link.href = url;
+        
+        const contentDisposition = response.headers['content-disposition'];
+        let fileName = `Reporte_${employeeName}.xlsx`; // Nombre por defecto
+        if (contentDisposition) {
+            const fileNameMatch = contentDisposition.match(/filename="(.+)"/);
+            if (fileNameMatch && fileNameMatch.length > 1) {
+                fileName = fileNameMatch[1];
+            }
+        }
+        link.setAttribute('download', fileName);
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        
+        toast.success("¡Reporte generado con éxito!");
+
+    } catch (err) {
+        // Lógica mejorada para leer el mensaje de error del backend si lo hay
+        if (err.response && err.response.data && err.response.data.toString() === '[object Blob]') {
+            const errorBlob = err.response.data;
+            const errorText = await errorBlob.text();
+            try {
+                const errorJson = JSON.parse(errorText);
+                toast.error(errorJson.message || 'Error al generar el reporte.');
+            } catch (jsonError) {
+                toast.error('Ocurrió un error inesperado al procesar el reporte.');
+            }
+        } else {
+             toast.error(err.response?.data?.message || 'Error al generar el reporte.');
+        }
+    } finally {
+        setIsGeneratingReport(false);
+    }
+};
+
+    // Línea para filtrar los registros no pagados
+const unpaidLogs = timeLogs.filter(log => !log.isPaid);
+
+
     // Bloque 15: Renderizado del Componente (JSX)
     return (
         <div className="time-entry-page-wrapper">
@@ -469,7 +619,49 @@ useEffect(() => {
             {/* Bloque 15: Historial de Registros */}
             <div className="dashboard-card" style={{ marginTop: '2rem' }}>
                 <h3>Historial de Registros</h3>
-                {loading ? (
+                {isAdmin && unpaidLogs.length > 0 && (
+        <div style={{ textAlign: 'center', margin: '15px 0' }}>
+            <button className="button-settle" onClick={handleOpenSettlementModal}>
+                Liquidar Quincena de {employeeName}
+            </button>
+        </div>
+    )}
+
+    {/* --- SECCIÓN PARA GENERAR REPORTE --- */}
+<div className="report-generator-box" style={{ border: '1px solid #ccc', padding: '15px', borderRadius: '8px', margin: '20px 0', backgroundColor: '#f9f9f9' }}>
+    <h4>Generar Reporte de Liquidación</h4>
+    <div style={{ display: 'flex', gap: '20px', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'center' }}>
+        <div className="form-group">
+            <label>Fecha de Inicio:</label>
+            <input type="date" value={reportStartDate} onChange={(e) => setReportStartDate(e.target.value)} />
+        </div>
+        <div className="form-group">
+            <label>Fecha de Fin:</label>
+            <input type="date" value={reportEndDate} onChange={(e) => setReportEndDate(e.target.value)} />
+        </div>
+    </div>
+    {/* --- NUEVO CHECKBOX AÑADIDO --- */}
+    <div className="form-group" style={{marginTop: '15px', textAlign: 'center'}}>
+        <label style={{ display: 'inline-flex', alignItems: 'center', cursor: 'pointer' }}>
+            <input 
+                type="checkbox" 
+                checked={includeSSInReport} 
+                onChange={(e) => setIncludeSSInReport(e.target.checked)}
+                style={{ marginRight: '8px', transform: 'scale(1.2)' }}
+            />
+            Incluir Descuento de Seguridad Social en el Reporte
+        </label>
+    </div>
+    <div style={{textAlign: 'center', marginTop: '15px'}}>
+        <button onClick={handleGenerateReport} className="button-success" disabled={isGeneratingReport}>
+            {isGeneratingReport ? 'Generando...' : 'Generar Excel'}
+        </button>
+    </div>
+</div>
+{/* --- FIN DE LA SECCIÓN DEL REPORTE --- */}
+    {/* ========== FIN: CÓDIGO A AÑADIR (PASO 2) ========== */}
+
+    {loading ? (
                     <p>Cargando registros...</p>
                 ) : timeLogs.length > 0 ? (
                     <div className="table-responsive-container">
@@ -510,25 +702,124 @@ useEffect(() => {
                                             </>
                                         )}
                                         <td className="action-buttons">
-    {(isAdmin || ((isClient || isAuxiliar) && !log.isFixed)) && (
+    {isAdmin ? (
+        // --- VISTA PARA EL ADMIN (CON BOTONES SIEMPRE ACTIVOS) ---
         <>
+            {/* Estos dos botones SIEMPRE están visibles para el admin */}
             <button className="button-edit" onClick={() => handleEdit(log)}>Editar</button>
             <button className="button-delete" onClick={() => handleDelete(log._id)}>Eliminar</button>
+
+            {/* Este botón o etiqueta cambia según el estado de pago */}
+            {!log.isPaid ? (
+                <button className="button-paid" onClick={() => handleMarkAsPaid(log._id)}>Pagado</button>
+            ) : (
+                <span className="paid-badge">Liquidado</span>
+            )}
+        </>
+
+    ) : isRepartidor ? (
+        // --- VISTA PARA EL REPARTIDOR (SE MANTIENE IGUAL) ---
+        <>
+            {log.isPaid ? (
+                <span className="paid-badge">Pagado</span>
+            ) : (
+                <span style={{ color: 'gray', fontSize: '0.8em' }}>Pendiente</span>
+            )}
+        </>
+
+    ) : (
+        // --- VISTA PARA OTROS ROLES (SE MANTIENE IGUAL) ---
+        <>
+            {(isClient || isAuxiliar) && !log.isFixed && (
+                 <button className="button-edit" onClick={() => handleEdit(log)}>Editar</button>
+            )}
+            {(isClient || isAuxiliar) && log.isFixed && (
+                <span style={{ color: 'gray', fontSize: '0.8em' }}>Fijado</span>
+            )}
         </>
     )}
-    {((isClient || isAuxiliar) && log.isFixed) && (
-        <span style={{ color: 'gray', fontSize: '0.8em' }}>Fijado</span>
-    )}
 </td>
+
                                     </tr>
                                 ))}
                             </tbody>
-                        </table>
+
+                                {/* ========== INICIO: CÓDIGO A AGREGAR (NUEVA VERSIÓN) ========== */}
+                                                               { !isAuxiliar && timeLogs.length > 0 && (
+                                    <tfoot>
+                                        <tr>
+                                            <td colSpan="7" className="summary-label">Suma Valor Neto:</td>
+                                            <td className="summary-value">
+                                                {totals.totalValorNeto.toLocaleString('es-CO', {
+                                                    style: 'currency',
+                                                    currency: 'COP',
+                                                })}
+                                            </td>
+                                            <td></td> {/* Celda vacía para la columna de Acciones */}
+                                        </tr>
+                                        <tr>
+                                            <td colSpan="7" className="summary-label">Suma Deducciones:</td>
+                                            <td className="summary-value">
+                                                {totals.totalDeducciones.toLocaleString('es-CO', {
+                                                    style: 'currency',
+                                                    currency: 'COP',
+                                                })}
+                                            </td>
+                                            <td></td> {/* Celda vacía para la columna de Acciones */}
+                                        </tr>
+                                        <tr className="total-row">
+                                            <td colSpan="7" className="summary-label">Total Final:</td>
+                                            <td className="summary-value">
+                                                {totals.totalFinal.toLocaleString('es-CO', {
+                                                    style: 'currency',
+                                                    currency: 'COP',
+                                                })}
+                                            </td>
+                                            <td></td> {/* Celda vacía para la columna de Acciones */}
+                                        </tr>
+                                    </tfoot>
+                                )}
+
+                                {/* ========== FIN: CÓDIGO A AGREGAR (NUEVA VERSIÓN) ========== */}
+
+                            </table>
+                        
                     </div>
                 ) : (
                     <p>No hay registros para este mensajero.</p>
                 )}
             </div>
+{/* ✅ AÑADE EL CÓDIGO DEL MODAL AQUÍ */}
+        {showSettlementModal && settlementDetails && (
+            <div className="modal-overlay">
+                <div className="modal-content">
+                    <h3>Confirmar Liquidación para {employeeName}</h3>
+                    <hr />
+                    <p><strong>Total Bruto a Pagar:</strong> ${settlementDetails.grossTotal.toLocaleString('es-CO')}</p>
+                    <p><strong>Descuento Préstamo:</strong> - ${settlementDetails.loanRepayment.toLocaleString('es-CO')}</p>
+                    <label style={{ display: 'flex', alignItems: 'center', margin: '15px 0' }}>
+                        <input 
+                            type="checkbox" 
+                            checked={deductSS} 
+                            onChange={() => setDeductSS(!deductSS)}
+                            style={{ marginRight: '10px', transform: 'scale(1.2)' }}
+                        />
+                        Descontar Seguridad Social (${settlementDetails.socialSecurityDeduction.toLocaleString('es-CO')})
+                    </label>
+                    <hr/>
+                    <h4 style={{ textAlign: 'right' }}>
+                        Total Final a Pagar: 
+                        <strong>
+                            ${ (settlementDetails.grossTotal - settlementDetails.loanRepayment - (deductSS ? settlementDetails.socialSecurityDeduction : 0)).toLocaleString('es-CO') }
+                        </strong>
+                    </h4>
+                    <div style={{ marginTop: '20px', display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                        <button onClick={() => setShowSettlementModal(false)} className="btn">Cancelar</button>
+                        <button onClick={handleConfirmSettlement} className="button-success">Confirmar y Liquidar</button>
+                    </div>
+                </div>
+            </div>
+        )}
         </div>
     );
 };

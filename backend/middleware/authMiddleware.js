@@ -64,28 +64,33 @@ const TimeLog = require('../models/TimeLog');
  }); 
 
  // Bloque 3 
- const authorizeRoles = (...roles) => { 
-     // Bloque 3.1 
-     return (req, res, next) => { 
-         console.log("--- DEBUG: authorizeRoles (Reforzado) ---"); 
-         console.log("Roles permitidos:", roles); 
-         if (!req.user || !req.user.role) { 
-             console.log("¡ADVERTENCIA DEBUG! req.user o req.user.role NO está definido en authorizeRoles."); 
-             return res.status(401).json({ message: "No autorizado. Usuario o rol no definido." }); 
-         } 
-         console.log("Rol del usuario autenticado (req.user.role):", req.user.role); 
-         console.log("ID del usuario autenticado (req.user.id):", req.user.id); 
-         console.log("--- FIN DEBUGGING (Reforzado) ---"); 
+ const authorizeRoles = (...roles) => {
+    return (req, res, next) => {
+        console.log('--- DEBUG: Verificando Permisos ---');
+        console.log('Roles permitidos para esta ruta:', roles);
+        
+        if (!req.user || !req.user.role) {
+            console.error('ERROR DEBUG: El usuario o su rol no están definidos en este punto.');
+            return res.status(401).json({ message: "No se pudo verificar el rol del usuario." });
+        }
 
-         // Bloque 3.2 
-         if (!roles.includes(req.user.role)) { 
-             return res.status(403).json({ 
-                 message: `El rol '${req.user.role}' no tiene permiso para acceder a esta ruta` 
-             }); 
-         } 
-         next(); 
-     }; 
- }; 
+        console.log('Usuario que intenta acceder (obtenido por el token):', req.user.username);
+        console.log(`Rol del usuario: '${req.user.role}'`);
+
+        const hasPermission = roles.includes(req.user.role);
+        console.log(`¿Está el rol '${req.user.role}' en la lista [${roles}]?:`, hasPermission);
+
+        if (!hasPermission) {
+            console.error('--- DEBUG: Permiso DENEGADO. ---');
+            return res.status(403).json({
+                message: `El rol '${req.user.role}' no tiene permiso para acceder a esta ruta.`
+            });
+        }
+        
+        console.log('--- DEBUG: Permiso CONCEDIDO. ---');
+        next();
+    };
+}; 
 
  // Bloque 4 
  module.exports = { protect, authorizeRoles };

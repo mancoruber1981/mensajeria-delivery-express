@@ -9,22 +9,43 @@ const TimeLog = require('../models/TimeLog');
 
 // --- FUNCIÓN 1: Obtener todos los empleados con su total ---
 const getAllEmployees = asyncHandler(async (req, res) => {
-    // 1. Obtenemos todos los empleados que son repartidores
-    const employees = await Employee.find({ role: 'repartidor' }).populate('user', 'username').lean();
+    // --- INICIO DE LA CORRECCIÓN LÓGICA ---
+    // 1. Buscamos primero en la colección de 'Users' a todos los que tengan el rol 'repartidor'.
+    // Esta es la fuente de verdad para saber quién es un repartidor.
+    const repartidorUsers = await User.find({ role: 'repartidor' }).select('_id');
 
-    // 2. Calculamos los totales a pagar sumando solo los registros NO pagados
+    // 2. Creamos una lista solo con los IDs de esos usuarios.
+    const repartidorUserIds = repartidorUsers.map(user => user._id);
+
+    // 3. Ahora sí, buscamos en la colección de 'Employees' los perfiles que están
+    // asociados a esa lista de IDs de usuarios repartidores.
+    const employees = await Employee.find({ user: { $in: repartidorUserIds } })
+                                    .populate('user', 'username')
+                                    .lean();
+    // --- FIN DE LA CORRECCIÓN LÓGICA ---
+
+    // Si no se encontraron empleados repartidores, devolvemos un array vacío para no continuar.
+    if (!employees.length) {
+        return res.json([]);
+    }
+
+    // --- MANTENEMOS TU LÓGICA PARA CALCULAR TOTALES ---
+    // (Esta parte de tu código es correcta y muy eficiente)
+    const employeeIds = employees.map(emp => emp._id);
+
+    // Calculamos los totales a pagar sumando solo los registros NO pagados
     const totals = await TimeLog.aggregate([
-        { $match: { isPaid: false } },
+        { $match: { isPaid: false, employee: { $in: employeeIds } } },
         { $group: { _id: '$employee', total: { $sum: '$valorNetoFinal' } } }
     ]);
 
-    // 3. Convertimos el resultado en un mapa para buscar totales fácilmente
+    // Convertimos el resultado en un mapa para buscar totales fácilmente
     const totalsMap = totals.reduce((acc, item) => {
         acc[item._id.toString()] = item.total;
         return acc;
     }, {});
 
-    // 4. Asignamos el total calculado a cada empleado
+    // Asignamos el total calculado a cada empleado
     const employeesWithTotals = employees.map(emp => {
         emp.currentBalance = totalsMap[emp._id.toString()] || 0;
         return emp;
@@ -126,30 +147,56 @@ const searchEmployees = asyncHandler(async (req, res) => {
     }
 });
 
-// --- FUNCIÓN 5: Eliminar un empleado ---
+// --- FUNCIÓN 5: Eliminar un empleado (VERSIÓN FINAL CON PERMISO PARA AUXILIAR) ---
 const deleteEmployee = asyncHandler(async (req, res) => {
     const { id } = req.params;
     const authenticatedUser = req.user;
+
     const employee = await Employee.findById(id);
     if (!employee) {
         res.status(404);
         throw new Error('Mensajero no encontrado.');
     }
+
+    // Lógica de eliminación para el rol 'cliente'
     if (authenticatedUser.role === 'cliente') {
         const client = await Client.findOne({ user: authenticatedUser._id });
+
         if (!client || !client.employees.some(empId => empId.toString() === employee._id.toString())) {
             res.status(403);
             throw new Error('No tienes permiso para eliminar este mensajero o no pertenece a tu empresa.');
         }
+
         client.employees = client.employees.filter(empId => empId.toString() !== employee._id.toString());
         await client.save();
         await TimeLog.deleteMany({ employee: employee._id });
-    } else if (authenticatedUser.role === 'admin') {
+
+    // --- LÓGICA AÑADIDA PARA EL AUXILIAR ---
+    } else if (authenticatedUser.role === 'auxiliar') {
+        const client = await Client.findById(authenticatedUser.associatedClient);
+
+        if (!client || !client.employees.some(empId => empId.toString() === employee._id.toString())) {
+            res.status(403);
+            throw new Error('No tienes permiso para eliminar este mensajero o no pertenece a la empresa de tu cliente.');
+        }
+
+        client.employees = client.employees.filter(empId => empId.toString() !== employee._id.toString());
+        await client.save();
         await TimeLog.deleteMany({ employee: employee._id });
+
+    // Lógica de eliminación para el rol 'admin'
+    } else if (authenticatedUser.role === 'admin') {
+        await Client.updateMany(
+            { employees: employee._id },
+            { $pull: { employees: employee._id } }
+        );
+        await TimeLog.deleteMany({ employee: employee._id });
+
     } else {
         res.status(403);
         throw new Error('No tienes permiso para eliminar mensajeros.');
     }
+
     await employee.deleteOne();
     res.status(200).json({ message: 'Mensajero eliminado con éxito.' });
 });
@@ -161,4 +208,5 @@ module.exports = {
     createEmployeeByClient,
     deleteEmployee,
     searchEmployees,
+    
 };

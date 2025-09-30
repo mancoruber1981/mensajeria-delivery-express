@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { useNavigate, Link } from 'react-router-dom'; // Agrupado Link con useNavigate
+import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { toast } from 'react-toastify';
 import API from '../api/api';
@@ -7,151 +7,126 @@ import LoadingSpinner from '../components/LoadingSpinner';
 
 const AdminDashboardPage = () => {
     const { user } = useAuth();
-    const navigate = useNavigate();
-
-    // Estados para la UI y manejo de datos
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
+    const [stats, setStats] = useState({
+        totalACobrar: 0,
+        totalAPagar: 0,
+        gananciaEstimada: 0,
+    });
 
-    // Estados para las estadísticas del dashboard
-    const [totalChargedToClients, setTotalChargedToClients] = useState(0);
-    const [totalToPayCouriers, setTotalToPayCouriers] = useState(0);
-    const [profit, setProfit] = useState(0);
+    // We'll use useCallback to keep the function reference stable for the interval
+    const fetchData = React.useCallback(async () => {
+        if (!user || user.role !== 'admin') {
+            setError('Acceso denegado.');
+            setLoading(false);
+            return;
+        }
 
-    // Efecto para cargar los datos del dashboard
+        // We don't set loading to true here to make the refresh seamless
+        setError(null);
+
+        try {
+            // ✅ CORRECTION: Added /api/ prefix
+            const { data } = await API.get('/api/admin/stats');
+
+            if (data && data.stats) {
+                setStats({
+                    totalACobrar: data.stats.totalACobrar,
+                    totalAPagar: data.stats.totalAPagar,
+                    gananciaEstimada: data.stats.gananciaEstimada,
+                });
+            } else {
+                console.error("La estructura de datos del dashboard no es la esperada.");
+                setError("Error al procesar los datos del dashboard.");
+            }
+        } catch (err) {
+            const errorMessage = err.response?.data?.message || 'Error al cargar datos del administrador.';
+            setError(errorMessage);
+            toast.error(errorMessage);
+        } finally {
+            // Make sure initial loading is set to false
+            setLoading(false);
+        }
+    }, [user]);
+
     useEffect(() => {
-        const fetchData = async () => {
-            // Validación de acceso
-            if (!user || user.role !== 'admin') {
-                setError('Acceso denegado. Esta página es solo para administradores.');
-                setLoading(false);
-                return;
-            }
+        fetchData(); // Fetch data on initial component mount
 
-            setLoading(true);
-            setError(null);
+        // ✅ NEW: Auto-refresh logic (polling every 30 seconds)
+        const intervalId = setInterval(() => {
+            console.log("Refrescando estadísticas del admin...");
+            fetchData();
+        }, 30000); // 30 seconds
 
-            try {
-                // 1️⃣ Llamada original a /admin/stats
-                const { data } = await API.get('/admin/stats');
-
-                if (data && data.stats) {
-                    setTotalChargedToClients(data.stats.totalACobrar);
-                    setTotalToPayCouriers(data.stats.totalAPagar);
-                    setProfit(data.stats.gananciaEstimada);
-                } else {
-                    console.error("La estructura de datos del dashboard no es la esperada.");
-                    setError("Error al procesar los datos del dashboard.");
-                }
-
-                // 2️⃣ Llamada a /employees para calcular y comparar
-                const { data: empData } = await API.get('/employees');
-                if (Array.isArray(empData.employees)) {
-                    const sumaEmployees = empData.employees.reduce(
-                        (acc, emp) => acc + (parseFloat(emp.totalPorPagar) || 0),
-                        0
-                    );
-                    // Mostramos en consola y como toast para ver la diferencia
-                    console.log(`💡 Comparativa: Stats = ${data.stats.totalAPagar}, Employees = ${sumaEmployees}`);
-                    toast.info(`Comparativa → Stats: ${data.stats.totalAPagar} | Employees: ${sumaEmployees}`);
-                }
-            } catch (err) {
-                const errorMessage = err.response?.data?.message || 'Error al cargar datos del administrador.';
-                setError(errorMessage);
-                toast.error(errorMessage);
-            } finally {
-                setLoading(false);
-            }
-        };
-
-        fetchData();
-    }, [user, navigate]);
+        // Cleanup function to clear the interval when the component unmounts
+        return () => clearInterval(intervalId);
+    }, [fetchData]);
 
     const handleSettleFortnight = async () => {
-    // 1. Muestra una advertencia clara antes de continuar
-    if (window.confirm('¡ADVERTENCIA!\n\nEsta acción marcará como pagados TODOS los registros pendientes de la última quincena. Este proceso no se puede deshacer.\n\n¿Estás seguro de que deseas continuar?')) {
-        try {
-            toast.info('Procesando liquidación, por favor espera...');
-            
-            // 2. Llama a la ruta del backend que creamos
-            const { data } = await API.post('/admin/settle-fortnight');
-            
-            toast.success(data.message);
-            
-            // 3. Refresca la página para que veas los totales actualizados en el dashboard
-            window.location.reload(); 
-        } catch (err) {
-            toast.error(err.response?.data?.message || 'Error al procesar la liquidación.');
+        if (window.confirm('¡ADVERTENCIA!\n\nEsta acción marcará como pagados TODOS los registros pendientes de la última quincena. Este proceso no se puede deshacer.\n\n¿Estás seguro de que deseas continuar?')) {
+            try {
+                toast.info('Procesando liquidación, por favor espera...');
+                // ✅ CORRECTION: Added /api/ prefix
+                const { data } = await API.post('/api/admin/settle-fortnight');
+                toast.success(data.message);
+                fetchData(); // Refresh data after settling
+            } catch (err) {
+                toast.error(err.response?.data?.message || 'Error al procesar la liquidación.');
+            }
         }
-    }
-};
-    
-    
-    // Renderizado condicional basado en el estado de carga y error
-    if (loading) {
-        return <LoadingSpinner />;
-    }
+    };
 
-    if (error) {
-        return <div className="error-message">Error: {error}</div>;
-    }
+    if (loading) return <LoadingSpinner />;
+    if (error) return <div className="error-message">Error: {error}</div>;
 
-    // Renderizado principal del componente
     return (
         <div className="dashboard-container">
             <h1>Panel de Administración</h1>
-
-            {/* Tarjeta de bienvenida */}
             <div className="dashboard-card">
                 <h2>Bienvenido, {user?.username}</h2>
                 <p>Desde aquí puedes gestionar todos los aspectos de la plataforma.</p>
             </div>
-
-            {/* Tarjeta de estadísticas rápidas */}
             <div className="dashboard-card" style={{ marginTop: '2rem' }}>
                 <h2>Estadísticas Rápidas</h2>
                 <p>
                     Total a Cobrar a Clientes:
                     <strong>
-                        $ {(totalChargedToClients || 0).toLocaleString('es-CO')}
+                        $ {(stats.totalACobrar || 0).toLocaleString('es-CO')}
                     </strong>
                 </p>
                 <p>
                     Total a Pagar a Repartidores:
                     <strong>
-                        $ {(totalToPayCouriers || 0).toLocaleString('es-CO')}
+                        $ {(stats.totalAPagar || 0).toLocaleString('es-CO')}
                     </strong>
                 </p>
                 <p>
                     Ganancia Estimada:
                     <strong>
-                        $ {(profit || 0).toLocaleString('es-CO')}
+                        $ {(stats.gananciaEstimada || 0).toLocaleString('es-CO')}
                     </strong>
                 </p>
             </div>
-
-            {/* Sección de navegación rápida */}
             <h2>Navegación Rápida</h2>
-            <div className="navigation-buttons" style={{ display: 'flex', gap: '10px' }}>
+            <div className="navigation-buttons" style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
                 <Link to="/admin/employees" className="btn btn-primary">
                     Gestionar Mensajeros
                 </Link>
                 <Link to="/admin/clients" className="btn btn-secondary">
                     Gestionar Clientes
                 </Link>
-                {/* Botón nuevo, añadido previamente */}
-                <Link to="/accountant-report" className="btn btn-success">
+                <Link to="/accountant-report" className="btn btn-info">
                     Reporte Financiero
                 </Link>
+                 <Link to="/loans" className="btn btn-warning">
+                    Gestionar Préstamos
+                </Link>
             </div>
-        {/* Puedes crear una nueva sección para acciones más importantes */}
             <h2 style={{ marginTop: '2rem' }}>Acciones Administrativas</h2>
             <div className="navigation-buttons">
-                {/* ================================================================= */}
-                {/* ✅ PASO 2: AGREGA EL NUEVO BOTÓN AQUÍ                          */}
-                {/* ================================================================= */}
                 <button onClick={handleSettleFortnight} className="btn btn-danger">
-                    Liquidar Última Quincena
+                    Liquidar Última Quincena (Global)
                 </button>
             </div>
         </div>

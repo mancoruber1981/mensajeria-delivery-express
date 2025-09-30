@@ -15,7 +15,7 @@ const RegisterPage = () => {
         fullName: '', address: '', idCard: '', phone: '', email: ''
     });
     const [clientDetails, setClientDetails] = useState({
-        fullNameHolder: '', idCard: '', nit: '', companyName: ''
+        fullNameHolder: '', idCard: '', nit: '', companyName: '', email: ''
     });
     const [formErrors, setFormErrors] = useState({}); // <-- AÑADIDO para manejar errores de validación
 
@@ -84,7 +84,7 @@ const RegisterPage = () => {
         };
 
         try {
-            const response = await api.post('/auth/register', registrationData);
+            const response = await api.post('/api/auth/register', registrationData);
             toast.success(response.data.message);
             navigate('/login');
         } catch (err) {
@@ -164,6 +164,18 @@ const RegisterPage = () => {
                                 <input type="text" id="companyName" name="companyName" value={clientDetails.companyName} onChange={handleClientChange} className={formErrors.companyName ? 'input-error' : ''} />
                                 {formErrors.companyName && <p className="error-text">{formErrors.companyName}</p>}
                             </div>
+                            <div className="form-group">
+    <label htmlFor="clientEmail">Correo Electrónico:</label>
+    <input 
+        type="email" 
+        id="clientEmail" 
+        name="email" 
+        value={clientDetails.email} 
+        onChange={handleClientChange} 
+        className={formErrors.email ? 'input-error' : ''} 
+    />
+    {formErrors.email && <p className="error-text">{formErrors.email}</p>}
+</div>
                         </div>
                     )}
                     

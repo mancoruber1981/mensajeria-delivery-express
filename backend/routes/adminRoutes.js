@@ -1,4 +1,4 @@
-// backend/routes/adminRoutes.js
+// backend/routes/adminRoutes.js (VERSIÓN FINAL CORREGIDA)
 
 const express = require('express');
 const router = express.Router();
@@ -17,48 +17,39 @@ const {
     approveUser,
     createAuxiliaryForClient,
     exportClientDataForAdmin,
-    deleteAuxiliaryByAdmin
+    deleteAuxiliaryByAdmin,
+    getEmployeeSettlementReport // <-- 1. IMPORTAMOS LA NUEVA FUNCIÓN
 } = require('../controllers/adminController');
 
 const { protect, authorizeRoles } = require('../middleware/authMiddleware');
 
-// ✅ LÍNEA PROBLEMÁTICA ELIMINADA
-// router.use(protect, authorizeRoles('admin'));
 
-// --- AHORA CADA RUTA TIENE SU PROPIA PROTECCIÓN EXPLÍCITA ---
-
-// Rutas del Dashboard Principal
+// --- RUTAS DEL DASHBOARD Y VISTAS ESPEJO ---
 router.get('/stats', protect, authorizeRoles('admin'), getDashboardStats);
-
-// Rutas de vista espejo para clientes y couriers
 router.get('/client-dashboard/:clientId', protect, authorizeRoles('admin'), getClientDashboardById);
-
-// Ruta para el historial de un empleado específico
 router.get('/employees/:employeeId/time-entries', protect, authorizeRoles('admin'), getEmployeeHistoryForAdmin);
 
-// Ruta del Libro Contable Unificado
+// --- RUTAS DE REPORTES Y EXPORTACIONES ---
 router.get('/accountant-report', protect, authorizeRoles('admin'), getAccountantLedger);
+router.get('/export/client/:clientId', protect, authorizeRoles('admin'), exportClientDataForAdmin);
 
-// Ruta para registrar un nuevo empleado
+// --- 2. AQUÍ ESTÁ LA NUEVA RUTA QUE FALTABA ---
+router.get('/employee/:employeeId/settlement-report', protect, authorizeRoles('admin'), getEmployeeSettlementReport);
+
+
+// --- RUTAS DE GESTIÓN DE USUARIOS Y EMPLEADOS ---
 router.post('/register-employee', protect, authorizeRoles('admin'), registerEmployee);
-
-// Rutas para Gestión de Usuarios
 router.get('/users/pending', protect, authorizeRoles('admin'), getPendingUsers);
 router.put('/users/:id/approve', protect, authorizeRoles('admin'), approveUser);
+router.post('/clients/:clientId/auxiliaries', protect, authorizeRoles('admin', 'cliente'), createAuxiliaryForClient);
+router.delete('/auxiliaries/:auxiliaryId', protect, authorizeRoles('admin'), deleteAuxiliaryByAdmin);
 
-// Rutas para Liquidaciones
+
+// --- RUTAS PARA LIQUIDACIONES ---
 router.post('/settle-fortnight', protect, authorizeRoles('admin'), settleFortnight);
 router.post('/settle-fortnight/:employeeId', protect, authorizeRoles('admin'), settleFortnightForEmployee);
 router.post('/settle-client/:clientId', protect, authorizeRoles('admin'), settleClientTotal);
 router.get('/preview-settlement/:employeeId', protect, authorizeRoles('admin'), getSettlementPreview);
 
-// Ruta para que el Admin registre un Auxiliar
-router.post('/clients/:clientId/auxiliaries', protect, authorizeRoles('admin', 'cliente'), createAuxiliaryForClient);
-
-// Ruta para que el Admin exporte datos de un cliente
-router.get('/export/client/:clientId', protect, authorizeRoles('admin'), exportClientDataForAdmin);
-
-// ✅ NUEVA RUTA PARA QUE EL ADMIN ELIMINE UN AUXILIAR
-router.delete('/auxiliaries/:auxiliaryId', protect, authorizeRoles('admin'), deleteAuxiliaryByAdmin);
 
 module.exports = router;

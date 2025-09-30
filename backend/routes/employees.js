@@ -21,6 +21,6 @@ router.route('/register-by-client').post(protect, authorizeRoles('cliente', 'aux
 // La ruta general '/:id' para obtener o eliminar un empleado
 router.route('/:id')
     .get(protect, authorizeRoles('admin', 'cliente', 'auxiliar'), getEmployeeById)
-    .delete(protect, authorizeRoles('cliente', 'admin'), deleteEmployee);
+    .delete(protect, authorizeRoles('cliente', 'admin', 'auxiliar'), deleteEmployee);
 
 module.exports = router;

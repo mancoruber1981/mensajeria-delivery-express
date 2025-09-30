@@ -856,3 +856,85 @@ select {
     background-color: rgba(0, 0, 0, 0.5); /* Fondo oscuro y semi-transparente */
     z-index: 98; /* Justo debajo del menú, pero por encima del resto de la página */
 }
+
+.summary-section {
+    margin-top: 30px;
+    padding: 20px;
+    background-color: #f9f9f9;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    text-align: right;
+    width: fit-content;
+    margin-left: auto; /* Alinea la caja a la derecha */
+}
+
+.summary-section h4 {
+    margin-top: 0;
+    margin-bottom: 10px;
+    color: #333;
+}
+
+.summary-box-repartidor {
+    display: flex;
+    justify-content: flex-end; /* Alinea el contenido a la derecha */
+    align-items: center;
+    gap: 20px;
+}
+
+.summary-total-value {
+    font-size: 1.8em;
+    font-weight: bold;
+    color: #28a745; /* Color verde para resaltar el total */
+    margin: 0;
+}
+
+/* ============================ */
+/* === Cuadro de Totales      === */
+/* ============================ */
+
+/* El contenedor principal de los totales */
+.totals-summary-box {
+  margin-top: 20px; /* Espacio entre la tabla y la caja de totales */
+  padding: 15px;
+  border-top: 2px solid #dee2e6; /* Línea superior para separar de la tabla */
+  background-color: #f8f9fa; /* Un fondo gris muy claro */
+  border-radius: 0 0 8px 8px; /* Redondea las esquinas inferiores */
+  display: flex;
+  flex-direction: column; /* Apila los ítems verticalmente */
+  align-items: flex-end; /* Alinea todo a la derecha */
+}
+
+/* Cada línea de total (ej. "Suma Valor Neto: $100") */
+.total-item {
+  width: 100%;
+  max-width: 350px; /* Ancho máximo para que no se estire demasiado en pantallas grandes */
+  display: flex;
+  justify-content: space-between; /* Pone el label a la izquierda y el valor a la derecha */
+  padding: 5px 0;
+  font-size: 1em;
+}
+
+/* El texto de la etiqueta (ej. "Suma Deducciones:") */
+.total-label {
+  color: #6c757d; /* Un color de texto más suave */
+}
+
+/* El valor numérico */
+.total-value {
+  font-weight: bold;
+  color: #343a40;
+}
+
+/* Estilos especiales para la línea del "Total Final" */
+.grand-total {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid #ced4da; /* Una línea fina para separar el total final */
+}
+
+.grand-total .total-label,
+.grand-total .total-value {
+  font-size: 1.15em; /* Texto más grande */
+  color: #212529; /* Texto más oscuro */
+  font-weight: bold;
+}

@@ -6,6 +6,8 @@ const Employee = require('../models/Employee');
 const Client = require('../models/Client');
 const jwt = require('jsonwebtoken');
 const mongoose = require('mongoose');
+const crypto = require('crypto');
+const sendEmail = require('../utils/sendEmail');
 // Función auxiliar para generar JWT
 const generateToken = (id) => {
     return jwt.sign({ id }, process.env.JWT_SECRET, {
@@ -13,91 +15,94 @@ const generateToken = (id) => {
     });
 };
 // Función para registrar un nuevo usuario y su perfil asociado
+// backend/controllers/authController.js
+
+// REEMPLAZA DE NUEVO TU FUNCIÓN registerUser CON ESTA VERSIÓN MEJORADA
 const registerUser = asyncHandler(async (req, res) => {
     const { username, password, role, profile } = req.body;
+
     if (!username || !password || !role) {
         res.status(400);
-        throw new Error('Por favor, ingresa todos los campos requeridos (usuario, contraseña, rol).');
+        throw new Error('Por favor, ingresa todos los campos requeridos.');
     }
-    // --- PASO 1: AÑADIR BLOQUEO PARA ROL DE ADMIN ---
     if (role === 'admin') {
-        res.status(403); // Forbidden
-        throw new Error('El registro de administradores no está permitido a través de este formulario.');
+        res.status(403);
+        throw new Error('El registro de administradores no está permitido.');
     }
-    // --
+
     const userExists = await User.findOne({ username });
     if (userExists) {
         res.status(400);
         throw new Error('El nombre de usuario ya está registrado.');
     }
-    // Validaciones de unicidad para perfiles antes de crear el User
-    if (role === 'repartidor' && profile && profile.idCard) {
-        const employeeExists = await Employee.findOne({ idCard: profile.idCard });
-        if (employeeExists) {
+
+    // Validaciones de perfil
+    if (role === 'repartidor' && profile?.idCard) {
+        if (await Employee.findOne({ idCard: profile.idCard })) {
             res.status(400);
             throw new Error('Ya existe un repartidor con esta cédula.');
         }
-    } else if (role === 'cliente' && profile && profile.nit) {
-        const clientExists = await Client.findOne({ nit: profile.nit });
-        if (clientExists) {
+    } else if (role === 'cliente' && profile?.nit) {
+        if (await Client.findOne({ nit: profile.nit })) {
             res.status(400);
             throw new Error('Ya existe un cliente/socio con este NIT.');
         }
     }
-    const user = await User.create({
+
+    // Creamos el usuario SIN el email primero
+    const user = new User({
         username,
         password,
         role,
     });
+
     if (user) {
         let createdProfile = null;
         let userRoleDiscriminator = role;
+
         if (role === 'repartidor') {
             if (!profile || !profile.fullName || !profile.address || !profile.idCard || !profile.phone || !profile.email) {
                 res.status(400);
-                throw new Error('Por favor, completa Nombre Completo, Dirección, Cédula, Teléfono y Email del Repartidor.');
+                throw new Error('Faltan datos del perfil del Repartidor.');
             }
-            createdProfile = await Employee.create({
-                ...profile,
-                user: user._id,
-                role: 'repartidor',       // <-- AÑADIDO
-                employeeType: 'empresa'
-            });
+            // --- CORRECCIÓN CLAVE AQUÍ ---
+            // Le asignamos el email al usuario ANTES de guardar
+            user.email = profile.email;
+            
+            createdProfile = await Employee.create({ ...profile, user: user._-id, role: 'repartidor', employeeType: 'empresa' });
             user.profile = createdProfile._id;
             userRoleDiscriminator = 'Employee';
+
         } else if (role === 'cliente') {
-            if (!profile || !profile.fullNameHolder || !profile.idCard || !profile.nit || !profile.companyName) {
-                res.status(400);
-                throw new Error('Por favor, completa todos los detalles del Cliente/Socio.');
-            }
-            createdProfile = await Client.create({
-                ...profile,
-                user: user._id
-            });
-            user.profile = createdProfile._id;
-            userRoleDiscriminator = 'Client';
-        } else { // Para roles 'auxiliar', 'contador', 'admin'
+    // 1. MODIFICAR ESTA VALIDACIÓN para incluir el email
+    if (!profile || !profile.fullNameHolder || !profile.idCard || !profile.nit || !profile.companyName || !profile.email) {
+        res.status(400);
+        throw new Error('Faltan datos del perfil del Cliente.');
+    }
+    
+    // --- CORRECCIÓN CLAVE AQUÍ (Ya la tenías, solo hay que asegurarse que se use) ---
+    // 2. ESTA LÍNEA AHORA ES FUNDAMENTAL
+    // Copiamos el email del perfil del cliente al modelo principal de Usuario
+    user.email = profile.email;
+    
+    createdProfile = await Client.create({ ...profile, user: user._id });
+    user.profile = createdProfile._id;
+    userRoleDiscriminator = 'Client';
+} else {
             user.profile = null;
             userRoleDiscriminator = role;
         }
+
         user.roleDiscriminator = userRoleDiscriminator;
+        
+        // Ahora sí, guardamos el usuario con el email ya copiado
         await user.save();
-        // --- PASO 2: CAMBIAR LA RESPUESTA FINAL (¡MUY IMPORTANTE!) ---
-        // Ya NO enviamos un token ni los datos del usuario.
-        // Solo enviamos un mensaje de éxito indicando que la cuenta está pendiente.
+
         res.status(201).json({
             success: true,
-            message: 'Registro exitoso. Tu cuenta está pendiente de aprobación por un administrador.'
+            message: 'Registro exitoso. Tu cuenta está pendiente de aprobación.'
         });
-        // -------------------------------------------------------------
-        /* // CÓDIGO ANTIGUO COMENTADO PARA REFERENCIA
-        const token = generateToken(user._id);
-        res.status(201).json({
-            success: true,
-            token,
-            user: { ... }
-        });
-        */
+
     } else {
         res.status(400);
         throw new Error('Datos de usuario inválidos.');
@@ -105,24 +110,31 @@ const registerUser = asyncHandler(async (req, res) => {
 });
 // Función para loguear un usuario (VERSIÓN FINAL CORREGIDA)
 const loginUser = asyncHandler(async (req, res) => {
-    // Recibimos los datos del formulario (el campo puede llamarse 'username' pero contener un email)
+    // ✅ CAMBIO: Ahora esperamos 'email' en lugar de 'username'
     const { username, password } = req.body;
 
-    // Buscamos en la base de datos un usuario donde el EMAIL o el USERNAME coincidan
-    const user = await User.findOne({ 
-        $or: [{ email: username }, { username: username }] 
-    });
+    if (!username || !password) {
+        res.status(400);
+        throw new Error('Por favor, ingresa el email y la contraseña.');
+    }
+
+    // Buscamos al usuario por su 'username' O 'email', ignorando mayúsculas/minúsculas
+    const user = await User.findOne({
+    $or: [
+        { email: username }, // <-- Usa 'username' aquí
+        { username: username } // <-- Y aquí también
+    ]
+});
 
     // Si encontramos un usuario Y la contraseña coincide...
     if (user && (await user.matchPassword(password))) {
         
-        // Verificamos que su cuenta esté activa
         if (user.status !== 'activo') {
             res.status(401);
             throw new Error(`Tu cuenta está en estado '${user.status}'. No puedes iniciar sesión.`);
         }
 
-        // Si todo es correcto, generamos el token y enviamos los datos
+        // El resto de tu lógica para poblar el perfil está bien
         let profileData = null;
         if (user.profile) {
             if (user.role === 'repartidor') {
@@ -131,6 +143,7 @@ const loginUser = asyncHandler(async (req, res) => {
                 profileData = await Client.findById(user.profile);
             }
         }
+        
         res.json({
             _id: user._id,
             username: user.username,
@@ -272,10 +285,9 @@ const addNoteToUserProfile = asyncHandler(async (req, res) => {
     const updatedProfile = await profile.save();
     res.json({ message: 'Nota añadida al perfil con éxito.', profile: updatedProfile });
 });
-// Un cliente registra a uno de sus auxiliares (VERSIÓN FINAL SIN EMAIL)
 const registerAuxiliaryByClient = asyncHandler(async (req, res) => {
-    const { username, password } = req.body;
-    const clientUser = req.user; // El cliente que está logueado
+    const { username, password, clientId } = req.body;
+    const clientUser = req.user; // <-- Definiste la variable como 'clientUser'
 
     if (!username || !password) {
         res.status(400);
@@ -288,19 +300,30 @@ const registerAuxiliaryByClient = asyncHandler(async (req, res) => {
         throw new Error('El nombre de usuario ya existe.');
     }
 
+    let clientProfileId;
+    // ✅ CORRECCIÓN: Usa 'clientUser' aquí
+    if (clientUser.role === 'admin' && clientId) {
+        clientProfileId = clientId;
+    // ✅ Y TAMBIÉN AQUÍ
+    } else if (clientUser.role === 'cliente') {
+        clientProfileId = clientUser.profile;
+    }
+
+    if (!clientProfileId) {
+        res.status(400);
+        throw new Error('No se pudo determinar el cliente para la asociación.');
+    }
+
     const user = await User.create({
         username,
-        password, // El modelo se encargará del hashing
+        password,
         role: 'auxiliar',
-        status: 'activo', // Se crea como activo directamente
-        associatedClient: clientUser.profile // Asocia al auxiliar con el perfil del cliente
+        status: 'activo',
+        associatedClient: clientProfileId
     });
 
     if (user) {
         res.status(201).json({
-            _id: user._id,
-            username: user.username,
-            role: user.role,
             message: 'Auxiliar registrado con éxito.'
         });
     } else {
@@ -329,6 +352,108 @@ const deleteAuxiliary = asyncHandler(async (req, res) => {
     await auxiliary.deleteOne();
     res.status(200).json({ message: 'Auxiliar eliminado con éxito.' });
 });
+
+// @desc    Gestionar solicitud de olvido de contraseña
+// @route   POST /api/auth/forgotpassword
+// @access  Public
+const forgotPassword = asyncHandler(async (req, res, next) => {
+    // 1. Buscar al usuario por el email que mandó en el body
+    const user = await User.findOne({ email: req.body.email });
+
+    // Por seguridad, incluso si el usuario no existe, enviamos una respuesta positiva.
+    // Esto evita que alguien pueda usar este formulario para adivinar qué correos están registrados.
+    if (!user) {
+        return res.status(200).json({ success: true, data: 'Email enviado si el usuario existe en nuestra base deatos.' });
+    }
+
+    // 2. Si el usuario existe, generar un token de reseteo
+    // Usamos el módulo 'crypto' de Node.js para generar un string aleatorio y seguro
+    const resetToken = crypto.randomBytes(20).toString('hex');
+
+    // 3. Hashear el token y guardarlo en la base de datos
+    // Guardamos una versión encriptada del token. Nunca guardamos tokens en texto plano.
+    user.resetPasswordToken = crypto
+        .createHash('sha256')
+        .update(resetToken)
+        .digest('hex');
+
+    // 4. Establecer una fecha de expiración para el token (ej: 10 minutos)
+    user.resetPasswordExpire = Date.now() + 10 * 60 * 1000; // 10 minutos
+    
+    await user.save({ validateBeforeSave: false }); // Guardamos los cambios en el usuario
+
+    // 5. Crear la URL de reseteo que irá en el correo
+    // Esta URL debe apuntar a la página de tu frontend que crearemos después
+    // La línea corregida para desarrollo local
+// La línea corregida y definitiva
+const resetUrl = `http://localhost:3000/#/resetpassword/${resetToken}`;
+
+    // 6. Crear el mensaje del correo
+    const message = `
+        Has solicitado un reseteo de contraseña. 
+        Por favor, haz clic en el siguiente enlace para restablecer tu contraseña:
+        \n\n
+        ${resetUrl}
+        \n\n
+        Si no has solicitado este cambio, por favor ignora este correo.
+    `;
+
+    // 7. Enviar el correo usando la utilidad que creamos
+    try {
+        await sendEmail({
+            email: user.email,
+            subject: 'Solicitud de Reseteo de Contraseña',
+            message,
+        });
+
+        res.status(200).json({ success: true, data: 'Email enviado.' });
+
+    } catch (err) {
+        console.error(err);
+        // Si el envío falla, limpiamos el token y la fecha de la DB para que pueda intentarlo de nuevo
+        user.resetPasswordToken = undefined;
+        user.resetPasswordExpire = undefined;
+        await user.save({ validateBeforeSave: false });
+
+        return res.status(500).json({ message: 'No se pudo enviar el correo.' });
+    }
+});
+
+// @desc    Restablecer la contraseña
+// @route   PUT /api/auth/resetpassword/:resetToken
+// @access  Public
+const resetPassword = asyncHandler(async (req, res, next) => {
+    // 1. Tomar el token de la URL y volver a hashearlo para compararlo con el de la BD
+    const resetPasswordToken = crypto
+        .createHash('sha256')
+        .update(req.params.resetToken)
+        .digest('hex');
+
+    // 2. Buscar al usuario que tenga ese token y que no haya expirado
+    const user = await User.findOne({
+        resetPasswordToken,
+        resetPasswordExpire: { $gt: Date.now() }, // $gt significa "greater than" (mayor que)
+    });
+
+    if (!user) {
+        res.status(400);
+        throw new Error('El enlace de reseteo no es válido o ha expirado.');
+    }
+
+    // 3. Si el token es válido, establecer la nueva contraseña
+    user.password = req.body.password;
+    // Limpiar los campos del token para que no se pueda volver a usar
+    user.resetPasswordToken = undefined;
+    user.resetPasswordExpire = undefined;
+    
+    await user.save();
+
+    res.status(200).json({
+        success: true,
+        data: 'Contraseña actualizada con éxito.',
+    });
+});
+
 module.exports = {
     registerUser,
     loginUser,
@@ -338,4 +463,6 @@ module.exports = {
     addNoteToUserProfile,
     registerAuxiliaryByClient,
     deleteAuxiliary,
+    forgotPassword,
+    resetPassword,
 };

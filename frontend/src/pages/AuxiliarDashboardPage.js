@@ -1,123 +1,127 @@
-import React, { useEffect, useState, useCallback } from 'react';
-import { useNavigate, Link } from 'react-router-dom'; // Se añade Link aquí
+import React, { useState, useEffect, useCallback } from 'react';
+import { Link, useNavigate } from 'react-router-dom'; // 1. Importar useNavigate
 import { useAuth } from '../contexts/AuthContext';
-import LoadingSpinner from '../components/LoadingSpinner';
 import API from '../api/api';
 import { toast } from 'react-toastify';
+import LoadingSpinner from '../components/LoadingSpinner'
 import '../index.css';
 
-const AuxiliarDashboardPage = () => {
-    const { user, loading: authLoading } = useAuth();
-    const navigate = useNavigate();
-    const [employees, setEmployees] = useState([]);
-    const [pageLoading, setPageLoading] = useState(true);
-    const [error, setError] = useState(null);
 
-    const fetchEmployees = useCallback(async () => {
-        if (authLoading || !user || user.role !== 'auxiliar' || !user.associatedClient || !user.associatedClientProfile?._id) {
-            if (!authLoading) {
-                setError("Perfil de cliente asociado no cargado o acceso denegado.");
-                setPageLoading(false);
-            }
+
+const AuxiliarDashboardPage = () => {
+    const { user } = useAuth();
+    const navigate = useNavigate(); // 2. Inicializar useNavigate
+    const [clientData, setClientData] = useState(null);
+    const [loading, setLoading] = useState(true);
+
+    const fetchClientDataForAuxiliary = useCallback(async () => {
+        if (!user || !user.associatedClient) {
+            setLoading(false);
             return;
         }
-
         try {
-            const res = await API.get(`/clients/${user.associatedClientProfile._id}`);
-            setEmployees(res.data.employees || []);
-            setError(null);
-        } catch (err) {
-            console.error("Error al cargar los mensajeros asociados para el auxiliar:", err.response?.data?.message || err.message);
-            setError(err.response?.data?.message || "Error al cargar los mensajeros asociados.");
-            toast.error(err.response?.data?.message || "Error al cargar los mensajeros.");
+            setLoading(true);
+            const { data } = await API.get(`/api/clients/${user.associatedClient}`);
+            setClientData(data);
+        } catch (error) {
+            toast.error('No se pudo cargar la información del cliente asociado.');
         } finally {
-            setPageLoading(false);
+            setLoading(false);
         }
-    }, [user, authLoading]);
+    }, [user]);
 
     useEffect(() => {
-        if (!authLoading && user && user.associatedClientProfile) {
-            fetchEmployees();
-        } else if (!authLoading && (!user || !user.associatedClientProfile)) {
-            setError("Acceso denegado o perfil de cliente asociado no disponible.");
-            setPageLoading(false);
+        fetchClientDataForAuxiliary();
+    }, [fetchClientDataForAuxiliary]);
+    
+    // 3. Crear la función para manejar el clic del botón
+    const handleRegisterEmployeeClick = () => {
+        if (user && user.associatedClient) {
+            // Navega a la página de registro, pasando el ID del cliente asociado
+            navigate(`/admin/register-employee-for/${user.associatedClient}`);
+        } else {
+            toast.error('No se pudo identificar al cliente asociado para registrar un nuevo empleado.');
         }
-    }, [authLoading, user, fetchEmployees]);
-
-    const handleManageTimeEntries = (employeeId) => {
-        navigate(`/time-entries/employee/${employeeId}`);
     };
 
-    if (authLoading || pageLoading) {
-        return <LoadingSpinner />;
+    if (loading) return <LoadingSpinner />;
+
+    // Pega esta nueva función en tu componente AuxiliarDashboardPage
+
+const handleDeleteEmployee = async (employeeId) => {
+    // Pedimos confirmación antes de una acción destructiva
+    if (!window.confirm('¿Estás seguro de que quieres eliminar a este empleado? Se borrará permanentemente.')) {
+        return;
     }
 
-    if (error) {
-        return <div className="error-message">Error: {error}</div>;
+    try {
+        await API.delete(`/api/employees/${employeeId}`);
+        toast.success('Empleado eliminado con éxito.');
+        // Volvemos a llamar a la función que carga los datos para refrescar la lista
+        fetchClientDataForAuxiliary(); 
+    } catch (error) {
+        toast.error(error.response?.data?.message || 'Error al eliminar el empleado.');
     }
-
-    if (!user || user.role !== 'auxiliar') {
-        return <div className="error-message">Acceso denegado. Esta página es solo para auxiliares.</div>;
-    }
+};
 
     return (
-    <div className="dashboard-container">
-        <h1>¡Bienvenido, Auxiliar {user?.username}!</h1>
-        {user.associatedClientProfile?.companyName && (
-            <p>Gestionando mensajeros de la empresa: <strong>{user.associatedClientProfile.companyName}</strong></p>
-        )}
-        <p>Selecciona un mensajero para gestionar sus registros de horario.</p>
-        
-        <div style={{ margin: '20px 0' }}>
-            <Link to="/register-employee" className="button-primary">
-                + Registrar Nuevo Mensajero
-            </Link>
-        </div>
+        <div className="dashboard-container">
+            <h1>Dashboard de Auxiliar</h1>
+            <div className="dashboard-card">
+                <h2>Bienvenido, {user?.username}</h2>
+                <p>Estás asociado al cliente: <strong>{clientData?.companyName || 'Cargando...'}</strong></p>
+                <p>Desde aquí puedes gestionar los horarios de sus empleados.</p>
+            </div>
 
-        <div className="dashboard-card">
-            <h2>Mensajeros de {user.associatedClientProfile?.companyName || 'tu Cliente'}</h2>
-            {employees.length > 0 ? (
-                // =================================================================
-                // ===== INICIO DE LA CORRECCIÓN ===================================
-                // =================================================================
-                <div className="table-responsive-container"> {/* <-- CORRECCIÓN 1: Nombre de clase correcto */}
-                    <table className="responsive-table"> {/* <-- CORRECCIÓN 2: Clase añadida a la tabla */}
-                        <thead>
-                            <tr>
-                                <th>Nombre Completo</th>
-                                <th>Cédula</th>
-                                <th>Teléfono</th>
-                                <th>Acciones</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {employees.map(employee => (
-                                <tr key={employee._id}>
-                                    <td>{employee.fullName}</td>
-                                    <td>{employee.idCard}</td>
-                                    <td>{employee.phone}</td>
-                                    <td>
-                                        <button
-                                            className="button-small" // Clase más genérica para el botón
-                                            onClick={() => handleManageTimeEntries(employee._id)}
-                                        >
-                                            Gestionar Horario
-                                        </button>
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
+            <div className="dashboard-card" style={{ marginTop: '2rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                    <h2>Empleados del Cliente</h2>
+                    {/* 4. Añadir el botón para registrar */}
+                    <button onClick={handleRegisterEmployeeClick} className="button-primary">+ Registrar Mensajero</button>
                 </div>
-                // =================================================================
-                // ===== FIN DE LA CORRECCIÓN ======================================
-                // =================================================================
-            ) : (
-                <p style={{ marginTop: '1.5rem' }}>Tu cliente aún no tiene mensajeros registrados.</p>
-            )}
-        </div>
+                
+                {clientData && clientData.employees.length > 0 ? (
+                     <div className="table-responsive-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Nombre del Empleado</th>
+                                    <th>Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {clientData.employees.map(employee => (
+                                    <tr key={employee._id}>
+                                        <td>{employee.fullName}</td>
+                                        <td>
+    <div style={{ display: 'flex', gap: '8px' }}>
+        <Link 
+            to={`/time-entries/employee/${employee._id}`} 
+            className="button-primary button-small">
+            Registrar Horario
+        </Link>
+        
+        {/* --- INICIO DEL CÓDIGO AÑADIDO --- */}
+        <button 
+            onClick={() => handleDeleteEmployee(employee._id)}
+            className="button-delete button-small">
+            Eliminar
+        </button>
+        {/* --- FIN DEL CÓDIGO AÑADIDO --- */}
     </div>
-);
+</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                ) : (
+                    <p>El cliente no tiene empleados registrados.</p>
+                )}
+            </div>
+        </div>
+    );
 };
 
 export default AuxiliarDashboardPage;
+

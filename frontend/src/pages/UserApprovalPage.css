@@ -93,3 +93,42 @@
         font-size: 0.75rem;
     }
 }
+/*
+ * Estilos para el Pie de Tabla (Resumen de Totales)
+ */
+tfoot {
+  background-color: #f9f9f9;
+  border-top: 1px solid #ddd;
+}
+
+tfoot tr td {
+  padding: 8px 15px;
+  border-top: 1px solid #e9e9e9;
+}
+
+/* Celda para las etiquetas del resumen */
+.summary-label {
+  text-align: right;
+  font-weight: 500;
+  color: #555;
+}
+
+/* Celda para los valores del resumen */
+.summary-value {
+  text-align: right;
+  font-weight: 500;
+  color: #222;
+}
+
+/* Fila para el total final */
+.total-row {
+  border-top: 2px solid #333;
+}
+
+.total-row td {
+  font-weight: bold;
+  font-size: 1.1rem;
+  color: #000;
+  padding-top: 12px;
+  padding-bottom: 12px;
+}

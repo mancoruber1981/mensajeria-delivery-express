@@ -11,7 +11,10 @@ const {
     fixUserProfile,
     addNoteToUserProfile,
     registerAuxiliaryByClient,
-    deleteAuxiliary
+    deleteAuxiliary,
+    forgotPassword,
+    resetPassword
+
 } = require('../controllers/authController');
 
 const { protect, authorizeRoles } = require('../middleware/authMiddleware');
@@ -19,6 +22,9 @@ const { protect, authorizeRoles } = require('../middleware/authMiddleware');
 // Rutas públicas de autenticación
 router.post('/register', registerUser);
 router.post('/login', loginUser);
+router.post('/forgotpassword', forgotPassword);
+router.put('/resetpassword/:resetToken', resetPassword);
+
 
 // Rutas protegidas para el perfil de usuario
 router.route('/me/profile')
@@ -30,7 +36,9 @@ router.put('/me/fix-profile', protect, authorizeRoles('repartidor', 'cliente'), 
 router.post('/me/note', protect, authorizeRoles('repartidor', 'cliente'), addNoteToUserProfile);
 
 // Rutas para la gestión de auxiliares por cliente
-router.route('/register-auxiliary-by-client').post(protect, authorizeRoles('cliente', ), registerAuxiliaryByClient);
+// En backend/routes/auth.js
+router.route('/register-auxiliary-by-client').post(protect, authorizeRoles('admin', 'cliente'), registerAuxiliaryByClient);
+
 // ✅ AGREGA ESTA NUEVA RUTA PARA ELIMINAR
-router.delete('/auxiliaries/:auxiliaryId', protect, authorizeRoles('cliente'), deleteAuxiliary);
+router.delete('/auxiliaries/:auxiliaryId', protect, authorizeRoles('admin', 'cliente'), deleteAuxiliary);
 module.exports = router;

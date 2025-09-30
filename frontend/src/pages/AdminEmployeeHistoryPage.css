@@ -1,61 +1,78 @@
-/* Estilos para AdminEmployeeHistoryPage.css */
+/* ==========================================================================
+   Contenedor y Estructura de la Tabla
+   ========================================================================== */
 
 .table-responsive-container {
-    width: 100%;
-    overflow-x: auto;
-    border: 1px solid #e9ecef;
-    border-radius: 8px;
-    margin-top: 2rem; /* El margen que antes estaba en línea */
-    background-color: white;
+  width: 100%;
+  overflow-x: auto;
+  border: 1px solid #e9ecef;
+  border-radius: 8px;
+  margin-top: 2rem;
+  background-color: white;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.05); /* Sombra sutil para darle profundidad */
 }
 
 .table-responsive-container table {
-    width: 100%;
-    min-width: 900px; /* Ancho mínimo para forzar el scroll */
-    border-collapse: collapse;
+  width: 100%;
+  min-width: 900px;
+  border-collapse: collapse;
 }
 
 .table-responsive-container th,
 .table-responsive-container td {
-    padding: 12px 15px;
-    white-space: nowrap;
-    text-align: left;
-    border-bottom: 1px solid #e9ecef;
+  padding: 12px 15px;
+  white-space: nowrap;
+  text-align: left;
+  border-bottom: 1px solid #e9ecef;
+  vertical-align: middle;
 }
 
 .table-responsive-container th {
-    background-color: #f8f9fa;
-    font-weight: 600;
-}
-/* Estilo para el nuevo botón 'Pagado' (Color gris) */
-.btn-pagado {
-    background-color: #e0e0e0;
-    color: #333;
-    border: 1px solid #ccc;
-    padding: 6px 10px;
-    border-radius: 4px;
-    cursor: pointer;
-    font-weight: bold;
-    font-size: 0.8em;
-    transition: background-color 0.3s;
+  background-color: #f8f9fa;
+  font-weight: 600;
+  color: #495057;
 }
 
-.btn-pagado:hover {
-    background-color: #d0d0d0;
+/* ==========================================================================
+   Botones y Etiquetas de Estado (Badges)
+   ========================================================================== */
+
+/* Botón de Liquidación (antes .btn-liquidacion) */
+.button-settle {
+  background-color: #1a73e8; /* Azul */
+  color: white;
+  border: none;
+  padding: 10px 15px;
+  border-radius: 5px;
+  cursor: pointer;
+  font-weight: bold;
+  transition: background-color 0.3s;
 }
 
-/* Estilo para el nuevo botón 'Liquidación' */
-.btn-liquidacion {
-    background-color: #1a73e8; /* Un azul de Google para un botón principal */
-    color: white;
-    border: none;
-    padding: 10px 15px;
-    border-radius: 5px;
-    cursor: pointer;
-    font-weight: bold;
-    transition: background-color 0.3s;
+.button-settle:hover {
+  background-color: #155bb5;
 }
 
-.btn-liquidacion:hover {
-    background-color: #155bb5;
+/* Botón para marcar como pagado (antes .btn-pagado) */
+/* Nota: Ya teníamos .button-paid, es mejor usar esa por consistencia */
+.button-paid {
+  background-color: #212529; /* Negro */
+  color: white;
+  border-color: #212529;
+}
+
+.button-paid:hover {
+  background-color: #424649;
+}
+
+/* Etiqueta para registros pendientes (Fondo Verde) */
+.pending-badge {
+  display: inline-block;
+  padding: 5px 10px;
+  background-color: #28a745; /* Verde */
+  color: white;
+  border-radius: 12px;
+  font-weight: bold;
+  font-size: 0.8em;
+  text-align: center;
 }

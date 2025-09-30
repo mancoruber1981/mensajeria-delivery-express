@@ -1,6 +1,7 @@
 // frontend/src/pages/LoginPage.js
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+// 1. Importa 'Link' para poder crear enlaces de navegación
+import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { toast } from 'react-toastify';
 import '../index.css';
@@ -16,35 +17,7 @@ const LoginPage = () => {
         e.preventDefault();
         setError('');
         try {
-            const loggedInUser = await login(username, password);
-            
-            toast.success('¡Inicio de sesión exitoso!');
-
-            // --- LÓGICA DE REDIRECCIÓN POR ROL (CORREGIDA) ---
-            switch (loggedInUser.role) {
-                case 'admin':
-                    navigate('/dashboard-admin'); // Redirige al admin a su dashboard
-                    break;
-                case 'cliente':
-                    navigate('/dashboard-cliente'); // Redirige al cliente a su dashboard
-                    break;
-                case 'repartidor':
-                    // Redirige al repartidor a su dashboard principal, no a una ruta genérica de time-entries.
-                    // Si necesita el ID para /time-entries/employee/:employeeId, se necesitaría otra lógica.
-                    // Por ahora, lo más seguro es ir a su dashboard general.
-                    navigate('/dashboard-repartidor');
-                    break;
-                case 'auxiliar': // Añadir caso para auxiliar si no está
-                    navigate('/auxiliar-home'); // Redirige al auxiliar a su página de inicio
-                    break;
-                case 'contador': // Añadir caso para contador si no está
-                    navigate('/dashboard-contador'); // Asumiendo que tendrás un dashboard para contador
-                    break;
-                default:
-                    navigate('/'); // A la página de inicio si el rol no coincide
-            }
-            // ------------------------------------
-
+            await login(username, password);
         } catch (err) {
             const errorMessage = err.response?.data?.message || 'Error al iniciar sesión.';
             setError(errorMessage);
@@ -67,6 +40,7 @@ const LoginPage = () => {
                     />
                 </div>
                 <div className="form-group">
+                    {/* CORRECCIÓN: La etiqueta ahora dice "Contraseña" */}
                     <label htmlFor="password">Contraseña:</label>
                     <input
                         type="password"
@@ -81,6 +55,13 @@ const LoginPage = () => {
                     <button type="submit" className="button-success">Iniciar Sesión</button>
                 </div>
             </form>
+
+            {/* --- INICIO DEL CÓDIGO AÑADIDO --- */}
+            <div className="form-footer-link">
+                <Link to="/forgot-password">¿Olvidaste tu contraseña?</Link>
+            </div>
+            {/* --- FIN DEL CÓDIGO AÑADIDO --- */}
+
         </div>
     );
 };

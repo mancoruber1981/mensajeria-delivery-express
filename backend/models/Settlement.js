@@ -23,7 +23,28 @@ const settlementSchema = mongoose.Schema({
         type: Date,
         required: true
     },
-    // Monto total liquidado
+
+    // --- INICIO DE CAMPOS AÑADIDOS (Siguiendo tu estilo) ---
+
+    // Monto bruto ANTES de descuentos
+    grossAmount: {
+        type: Number,
+        required: true
+    },
+    // Monto deducido por concepto de préstamo
+    loanDeduction: {
+        type: Number,
+        default: 0
+    },
+    // Monto deducido por concepto de Seguridad Social
+    socialSecurityDeduction: {
+        type: Number,
+        default: 0
+    },
+
+    // --- FIN DE CAMPOS AÑADIDOS ---
+    
+    // Monto NETO final pagado (Bruto - Descuentos)
     totalAmount: {
         type: Number,
         required: true

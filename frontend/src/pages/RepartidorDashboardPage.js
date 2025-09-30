@@ -1,4 +1,5 @@
-// fronted/src/RepartidorDashboardPage/pagina espejo para ver los registros del repartidor
+// fronted/src/RepartidorDashboardPage/pagina para el repartidor generar los registros 
+
 // ==================== BLOQUE 1: Importaciones y Funciones Auxiliares ====================
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -82,6 +83,7 @@ const RepartidorDashboardPage = () => {
 };
 
     const isAdminView = user?.role === 'admin' && employeeId;
+    const isRepartidorView = user?.role === 'repartidor';
     const targetEmployeeId = isAdminView ? employeeId : user?.profile?._id;
 
     // Bloque 2.2
@@ -184,48 +186,49 @@ const RepartidorDashboardPage = () => {
 
 // ==================== BLOQUE 6: Fetch de Datos del Repartidor (Centralizado y CORREGIDO) ====================
     const fetchRepartidorData = useCallback(async () => {
-        setPageLoading(true);
-        setError(null);
+    // Determina el ID del empleado a buscar basado en la vista
+    const targetEmployeeId = isAdminView ? employeeId : user?.profile?._id;
 
-        let currentTargetEmployeeId;
+    if (!user || !targetEmployeeId) {
+        setError('No se pudo determinar el ID del empleado.');
+        setPageLoading(false);
+        return;
+    }
+
+    setPageLoading(true);
+    setError(null);
+
+    try {
+        let employeeDisplayName = '';
+        let currentBalance = 0;
+
+        // Si es la vista del admin, busca los datos del empleado por su ID
         if (isAdminView) {
-            currentTargetEmployeeId = employeeId;
-            setViewingAsAdmin(true);
+            const employeeRes = await API.get(`/api/employees/${targetEmployeeId}`);
+            employeeDisplayName = employeeRes.data.fullName || 'Empleado Desconocido';
+            currentBalance = employeeRes.data.currentBalance;
         } else {
-            currentTargetEmployeeId = user?.profile?._id;
+            // Si es la vista del repartidor, usa los datos de su propio perfil
+            employeeDisplayName = user.profile?.fullName || user.username;
+            currentBalance = user.profile?.currentBalance || 0;
         }
 
-        if (!user || !currentTargetEmployeeId) {
-            setError('No se pudo determinar el ID del empleado o el perfil del usuario.');
-            setPageLoading(false);
-            return;
-        }
+        // Busca los registros de tiempo para ese empleado
+        const logsRes = await API.get(`/api/timelogs/employee/${targetEmployeeId}`);
 
-        try {
-            let employeeDisplayName = '';
-            let currentBalance = 0;
+        // Actualiza todos los estados
+        setEmployeeName(employeeDisplayName);
+        setRepartidorBalance(currentBalance);
+        setTimeLogs(logsRes.data);
 
-            if (isAdminView) {
-                const employeeRes = await API.get(`/employees/${currentTargetEmployeeId}`);
-                employeeDisplayName = employeeRes.data.fullName || 'Empleado Desconocido';
-                currentBalance = employeeRes.data.currentBalance;
-            } else {
-                employeeDisplayName = user.profile?.fullName || user.username;
-                currentBalance = user.profile?.currentBalance || 0;
-            }
-
-            setEmployeeName(employeeDisplayName);
-            setRepartidorBalance(currentBalance);
-            const res = await API.get(`/timelogs/employee/${currentTargetEmployeeId}`);
-            setTimeLogs(res.data);
-        } catch (err) {
-            console.error("ERROR al cargar datos del repartidor:", err.response?.data?.message || err.message);
-            setError(err.response?.data?.message || "Error al cargar los datos del repartidor.");
-            toast.error(err.response?.data?.message || "Error al cargar los datos del repartidor.");
-        } finally {
-            setPageLoading(false);
-        }
-    }, [user, employeeId, isAdminView]);
+    } catch (err) {
+        const errorMessage = err.response?.data?.message || "Error al cargar los datos del repartidor.";
+        setError(errorMessage);
+        toast.error(errorMessage);
+    } finally {
+        setPageLoading(false);
+    }
+}, [user, employeeId, isAdminView]);
 
 
 // ==================== BLOQUE 7: useEffect para Cargar Datos Iniciales ====================
@@ -245,66 +248,65 @@ const RepartidorDashboardPage = () => {
 
 // ==================== BLOQUE 9: Manejador de Envío de Formulario (handleSubmit) ====================
     const handleSubmit = async (e) => {
-        e.preventDefault();
-        const currentTargetEmployeeId = isAdminView ? employeeId : user?.profile?._id;
+    e.preventDefault();
+    const currentTargetEmployeeId = isAdminView ? employeeId : user?.profile?._id;
 
-        if (!user || !currentTargetEmployeeId) {
-            toast.error("Error: No se pudo identificar el perfil del usuario o el ID del empleado.");
-            return;
-        }
-        if (!formData.empresa.trim()) {
-            toast.error("Por favor, ingresa el nombre de la empresa/cliente.");
-            return;
-        }
+    if (!user || !currentTargetEmployeeId) {
+        toast.error("Error: No se pudo identificar el perfil del usuario o el ID del empleado.");
+        return;
+    }
+    if (!formData.empresa.trim()) {
+        toast.error("Por favor, ingresa el nombre de la empresa/cliente.");
+        return;
+    }
 
-        const calculatedValues = recalculateTotals(formData);
+    // Asegúrate de tener una función recalculateTotals en este archivo
+    const calculatedValues = recalculateTotals(formData); 
 
-        const dataToSend = {
-            employee: currentTargetEmployeeId,
-            date: formData.date,
-            horaInicio: formData.horaInicio,
-            horaFin: formData.horaFin,
-            valorHora: parseFloat(formData.valorHora),
-            festivo: formData.festivo,
-            descuentoAlmuerzo: parseFloat(formData.descuentoAlmuerzo),
-            minutosAlmuerzoSinPago: parseInt(formData.minutosAlmuerzoSinPago, 10),
-            empresa: formData.empresa.trim(),
-            totalLoanDeducted: parseFloat(formData.montoPrestamoDeducir) || 0,
-
-            horasBrutas: calculatedValues.minutosBrutos / 60,
-            subtotal: calculatedValues.subtotal,
-            valorNeto: calculatedValues.valorNeto,
-            valorNetoFinal: calculatedValues.valorFinalConDeducciones,
-        };
-
-        try {
-            if (editingLog && editingLog._id) {
-                await API.put(`/timelogs/${editingLog._id}`, dataToSend);
-                toast.success('Registro actualizado con éxito');
-            } else {
-                await API.post('/timelogs', dataToSend);
-                toast.success('Registro guardado con éxito');
-            }
-
-            fetchRepartidorData();
-
-            setEditingLog(null);
-            setFormData({
-                date: new Date().toISOString().split('T')[0],
-                horaInicio: '',
-                horaFin: '',
-                valorHora: '0',
-                festivo: false,
-                descuentoAlmuerzo: '0',
-                minutosAlmuerzoSinPago: '0',
-                empresa: '',
-                montoPrestamoDeducir: '0'
-            });
-        } catch (err) {
-            console.error("Error en handleSubmit:", err.response?.data?.message || err.message);
-            toast.error(err.response?.data?.message || 'Error al guardar.');
-        }
+    const dataToSend = {
+        employee: currentTargetEmployeeId,
+        date: formData.date,
+        horaInicio: formData.horaInicio,
+        horaFin: formData.horaFin,
+        valorHora: parseFloat(formData.valorHora),
+        festivo: formData.festivo,
+        descuentoAlmuerzo: parseFloat(formData.descuentoAlmuerzo),
+        minutosAlmuerzoSinPago: parseInt(formData.minutosAlmuerzoSinPago, 10),
+        empresa: formData.empresa.trim(),
+        totalLoanDeducted: parseFloat(formData.montoPrestamoDeducir) || 0,
+        horasBrutas: calculatedValues.minutosBrutos / 60,
+        subtotal: calculatedValues.subtotal,
+        valorNeto: calculatedValues.valorNeto,
+        valorNetoFinal: calculatedValues.valorFinalConDeducciones,
     };
+
+    try {
+        if (editingLog && editingLog._id) {
+            await API.put(`/api/timelogs/${editingLog._id}`, dataToSend);
+            toast.success('Registro actualizado con éxito');
+        } else {
+            await API.post('/api/timelogs', dataToSend);
+            toast.success('Registro guardado con éxito');
+        }
+
+        fetchRepartidorData();
+        setEditingLog(null);
+        setFormData({
+            date: new Date().toISOString().split('T')[0],
+            horaInicio: '',
+            horaFin: '',
+            valorHora: '0',
+            festivo: false,
+            descuentoAlmuerzo: '0',
+            minutosAlmuerzoSinPago: '0',
+            empresa: '',
+            montoPrestamoDeducir: '0'
+        });
+    } catch (err) {
+        console.error("Error en handleSubmit:", err.response?.data?.message || err.message);
+        toast.error(err.response?.data?.message || 'Error al guardar.');
+    }
+};
 
 
 // ==================== BLOQUE 10: Manejadores de Acciones de la Tabla (handleEdit y handleDelete) ====================
@@ -333,7 +335,7 @@ const RepartidorDashboardPage = () => {
     const handleDelete = async (logId) => {
         if (window.confirm('¿Estás seguro de que quieres eliminar este registro?')) {
             try {
-                await API.delete(`/timelogs/${logId}`);
+                await API.delete(`/api/timelogs/${logId}`);
                 toast.success('Registro eliminado con éxito.');
                 fetchRepartidorData();
             } catch (err) {
@@ -384,6 +386,28 @@ const RepartidorDashboardPage = () => {
         return <div className="error-message">Acceso denegado.</div>;
     }
 
+    // Pega esto JUSTO ANTES de la línea 'return ('
+
+// ==================== BLOQUE 12.5: Lógica para Calcular Totales ====================
+const calculateTotals = (logs) => {
+    return logs.reduce((acc, log) => {
+        const valorNetoInicial = log.valorNeto || 0;
+        const deduccion = log.totalLoanDeducted || 0;
+        const valorNetoFinal = valorNetoInicial - deduccion;
+
+        acc.totalValorNeto += valorNetoInicial;
+        acc.totalDeducciones += deduccion;
+        acc.totalFinal += valorNetoFinal;
+
+        return acc;
+    }, {
+        totalValorNeto: 0,
+        totalDeducciones: 0,
+        totalFinal: 0,
+    });
+};
+
+const totals = calculateTotals(timeLogs);
 
 // ==================== BLOQUE 13: Renderizado JSX del Componente ====================
     return (
@@ -499,62 +523,94 @@ const RepartidorDashboardPage = () => {
                 </div>
 
                 <div className="table-responsive-container">
-                    {timeLogs.length > 0 ? (
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>Fecha</th>
-                                    <th>Empresa</th>
-                                    <th>Inicio</th>
-                                    <th>Fin</th>
-                                    <th>H. Brutas</th>
-                                    <th>V. Neto Inicial</th>
-                                    <th>Deducción</th>
-                                    <th>V. Neto Final</th>
-                                    <th>Acciones</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {timeLogs.map(log => {
-                                    const valorNetoInicial = log.valorNeto || 0;
-                                    const deduccion = log.totalLoanDeducted || 0;
-                                    const valorNetoFinal = valorNetoInicial - deduccion;
-                                    const horasBrutasFormateadas = formatHoursAndMinutes(log.horasBrutas);
-                                    return (
-                                        <tr key={log._id} className={log.isPaid ? 'paid-row' : ''}>
-                                            <td>{new Date(log.date).toLocaleDateString('es-CO', { timeZone: 'UTC' })}</td>
-                                            <td>{log.empresa || 'N/A'}</td>
-                                            <td>{log.horaInicio}</td>
-                                            <td>{log.horaFin}</td>
-                                            <td>{horasBrutasFormateadas}</td>
-                                            <td>${valorNetoInicial.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                                            <td>${deduccion.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                                            <td>${valorNetoFinal.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                                            <td className="action-buttons">
-                                                {user?.role === 'admin'? (
-                                                    <>
-                                                        <button className="button-edit" onClick={() => handleEdit(log)}>Editar</button>
-                                                        <button className="button-delete" onClick={() => handleDelete(log._id)}>Eliminar</button>
-                                                        <button className="btn-pagado" onClick={() => handlePaid(log._id)}>Pagado</button>
-                                                    </>
-                                                ) : user?.role === 'repartidor' && !log.isFixed ? (
-                                                    <>
-                                                        <button className="button-edit" onClick={() => handleEdit(log)}>Editar</button>
-                                                        <button className="button-delete" onClick={() => handleDelete(log._id)}>Eliminar</button>
-                                                    </>
-                                                ) : (
-                                                    <span className="paid-label">Pagado</span>
-                                                )}
-                                            </td>
-                                        </tr>
-                                    );
-                                })}
-                            </tbody>
-                        </table>
-                    ) : (
-                        <p>No hay registros personales aún.</p>
-                    )}
+    {timeLogs.length > 0 ? (
+        <> {/* ✅ Se añade un Fragment para agrupar la tabla y los totales */}
+            <table>
+                <thead>
+                    <tr>
+                        <th>Fecha</th>
+                        <th>Empresa</th>
+                        <th>Inicio</th>
+                        <th>Fin</th>
+                        <th>H. Brutas</th>
+                        <th>V. Neto Inicial</th>
+                        <th>Deducción</th>
+                        <th>V. Neto Final</th>
+                        <th>Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {timeLogs.map(log => {
+                        const valorNetoInicial = log.valorNeto || 0;
+                        const deduccion = log.totalLoanDeducted || 0;
+                        const valorNetoFinal = valorNetoInicial - deduccion;
+                        const horasBrutasFormateadas = formatHoursAndMinutes(log.horasBrutas);
+                        return (
+                            <tr key={log._id} className={log.isPaid ? 'paid-row' : ''}>
+                                <td>{new Date(log.date).toLocaleDateString('es-CO', { timeZone: 'UTC' })}</td>
+                                <td>{log.empresa || 'N/A'}</td>
+                                <td>{log.horaInicio}</td>
+                                <td>{log.horaFin}</td>
+                                <td>{horasBrutasFormateadas}</td>
+                                <td>${valorNetoInicial.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                                <td>${deduccion.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                                <td>${valorNetoFinal.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                                <td className="action-buttons">
+    {isAdminView ? (
+        // --- VISTA PARA EL ADMIN (CONTROL TOTAL) ---
+        <>
+            {!log.isPaid ? (
+                <>
+                    <button className="button-edit" onClick={() => handleEdit(log)}>Editar</button>
+                    <button className="button-delete" onClick={() => handleDelete(log._id)}>Eliminar</button>
+                    <button className="button-paid" onClick={() => handlePaid(log._id)}>Pagado</button>
+                </>
+            ) : (
+                <span className="paid-badge">Liquidado</span>
+            )}
+        </>
+    ) : isRepartidorView ? (
+        // --- VISTA PARA EL REPARTIDOR ---
+        <>
+            {!log.isPaid ? (
+                // Si NO está pagado, muestra los botones de acción
+                <>
+                    <button className="button-edit" onClick={() => handleEdit(log)}>Editar</button>
+                    <button className="button-delete" onClick={() => handleDelete(log._id)}>Eliminar</button>
+                </>
+            ) : (
+                // Si SÍ está pagado, muestra solo la etiqueta
+                <span className="paid-badge">Pagado</span>
+            )}
+        </>
+    ) : null }
+</td>
+                            </tr>
+                        );
+                    })}
+                </tbody>
+            </table>
+
+            {/* ✅ AQUÍ, JUSTO DESPUÉS DE LA TABLA, VA EL NUEVO CUADRO DE TOTALES */}
+            <div className="totals-summary-box">
+                <div className="total-item">
+                    <span className="total-label">Suma Valor Neto:</span>
+                    <span className="total-value">${totals.totalValorNeto.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                 </div>
+                <div className="total-item">
+                    <span className="total-label">Suma Deducciones:</span>
+                    <span className="total-value">-${totals.totalDeducciones.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                </div>
+                <div className="total-item grand-total">
+                    <span className="total-label">Total Final:</span>
+                    <span className="total-value">${totals.totalFinal.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                </div>
+            </div>
+        </>
+    ) : (
+        <p>No hay registros personales aún.</p>
+    )}
+</div>
             </div>
 
             {showSettlementModal && settlementDetails && (

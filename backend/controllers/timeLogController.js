@@ -6,6 +6,7 @@ const TimeLog = require('../models/TimeLog');
 const Employee = require('../models/Employee');
 const Client = require('../models/Client');
 const User = require('../models/User');
+const ExcelJS = require('exceljs'); 
 const { generateTimeLogExcelReport } = require('../utils/excelGenerator');
 
 // Bloque 2: Crear un nuevo registro de horario (Versión Corregida)
@@ -343,69 +344,72 @@ const getTimeLogsByClient = asyncHandler(async (req, res) => {
 
 // Bloque 8: Exportar registros de tiempo de un empleado a Excel
 const exportTimeLogsToExcelForEmployee = asyncHandler(async (req, res) => {
-  try {
-    const { employeeId } = req.params;
-    console.log(`[EXPORT] Iniciando exportación para employeeId: ${employeeId}`);
-    console.log(`[EXPORT] Usuario autenticado:`, req.user?.role);
+    const { employeeId } = req.params;
 
-    if (req.user.role === 'repartidor') {
-      if (!req.user.profile || req.user.profile._id.toString() !== employeeId) {
-        console.log("[EXPORT] ❌ Repartidor sin permiso para este ID");
-        return res.status(403).json({ message: 'Sin permiso para exportar estos registros.' });
-      }
-    } else if (req.user.role !== 'admin') {
-      console.log("[EXPORT] ❌ Usuario sin rol permitido");
-      return res.status(403).json({ message: 'Acceso denegado' });
-    }
+    if (req.user.role === 'repartidor') {
+        if (!req.user.profile || req.user.profile._id.toString() !== employeeId) {
+            return res.status(403).json({ message: 'Sin permiso para exportar estos registros.' });
+        }
+    } else if (req.user.role !== 'admin') {
+        return res.status(403).json({ message: 'Acceso denegado' });
+    }
 
-    const timeLogs = await TimeLog.find({ employee: employeeId })
-      .populate({ path: 'employee', select: 'fullName' })
-      .populate({ path: 'user', select: 'username' })
-      .sort({ date: -1 });
+    const allTimeLogs = await TimeLog.find({ employee: employeeId }).sort({ date: 1 }).lean();
 
-    if (!timeLogs || timeLogs.length === 0) {
-      console.log("[EXPORT] ⚠️ No se encontraron registros.");
-      return res.status(404).json({ message: 'No hay registros para exportar.' });
-    }
+    if (!allTimeLogs || allTimeLogs.length === 0) {
+        return res.status(404).json({ message: 'No tienes ningún registro en tu historial para exportar.' });
+    }
 
-    const employeeName = timeLogs[0].employee?.fullName || `Empleado_${employeeId}`;
-    const dataForExcel = timeLogs.map(log => ({
-      employeeName: log.employee?.fullName || 'N/A',
-      date: new Date(log.date).toLocaleDateString('es-CO', { timeZone: 'UTC' }),
-      empresa: log.empresa,
-      festivo: log.festivo ? 'Sí' : 'No',
-      horaInicio: log.horaInicio,
-      horaFin: log.horaFin,
-      horasBrutas: log.horasBrutas,
-      minutosAlmuerzoSinPago: log.minutosAlmuerzoSinPago,
-      valorHora: log.valorHora,
-      subtotal: log.subtotal,
-      descuentoAlmuerzo: log.descuentoAlmuerzo,
-      valorNetoInicial: log.valorNeto,
-      deduccionPrestamo: log.totalLoanDeducted,
-      valorNetoFinal: (log.valorNeto - log.totalLoanDeducted),
-      estado: log.estado,
-      fijado: log.isFixed ? 'Sí' : 'No',
-      registeredBy: log.user?.username || 'N/A',
-      createdAt: log.createdAt
-    }));
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'Delivery Express SAS';
+    const detailsSheet = workbook.addWorksheet('Historial Completo de Registros');
+    
+    detailsSheet.columns = [
+        { header: 'Fecha', key: 'date', width: 15, style: { numFmt: 'dd/mm/yyyy' } },
+        { header: 'Empresa', key: 'empresa', width: 25 },
+        { header: 'Subtotal', key: 'subtotal', width: 18, style: { numFmt: '$ #,##0.00' } },
+        { header: 'Desc. Almuerzo', key: 'descuentoAlmuerzo', width: 18, style: { numFmt: '$ #,##0.00' } },
+        { header: 'Valor Neto Inicial', key: 'valorNetoInicial', width: 18, style: { numFmt: '$ #,##0.00' } },
+        { header: 'Deducción Préstamo', key: 'totalLoanDeducted', width: 18, style: { numFmt: '$ #,##0.00' } },
+        { header: 'Valor Neto Final', key: 'valorNetoFinal', width: 18, style: { numFmt: '$ #,##0.00' } },
+        { header: 'Estado', key: 'estado', width: 15 },
+    ];
+    
+    const detailsData = allTimeLogs.map(log => ({
+        date: new Date(log.date),
+        empresa: log.empresa,
+        subtotal: log.subtotal,
+        descuentoAlmuerzo: log.descuentoAlmuerzo,
+        valorNetoInicial: log.valorNeto,
+        totalLoanDeducted: log.totalLoanDeducted,
+        valorNetoFinal: log.valorNetoFinal,
+        estado: log.isPaid ? 'Pagado' : 'Pendiente'
+    }));
+    detailsSheet.addRows(detailsData);
+    
+    const dataRowCount = detailsData.length;
+    if (dataRowCount > 0) {
+        const totalRow = detailsSheet.addRow([]);
+        const totalsLabelCell = totalRow.getCell('F');
+        totalsLabelCell.value = 'TOTAL HISTÓRICO:';
+        totalsLabelCell.font = { bold: true };
+        totalsLabelCell.alignment = { horizontal: 'right' };
+        
+        const totalsValueCell = totalRow.getCell('G');
+        totalsValueCell.value = { formula: `SUM(G2:G${1 + dataRowCount})` }; 
+        totalsValueCell.font = { bold: true };
+        totalsValueCell.numFmt = '$ #,##0.00';
+    }
 
-    console.log(`[EXPORT] Generando Excel para: ${employeeName} con ${dataForExcel.length} registros`);
-    const buffer = await generateTimeLogExcelReport(dataForExcel, `Reporte de Horarios - ${employeeName}`);
-    console.log(`[EXPORT] Buffer generado con tamaño: ${buffer.length}`);
+    const employee = await Employee.findById(employeeId).lean();
+    const employeeName = employee?.fullName || 'repartidor';
+    const fileName = `Reporte_Historial_${employeeName.replace(/\s/g, '_')}.xlsx`;
 
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', `attachment; filename=reporte_horarios_${employeeName}.xlsx`);
-    res.send(buffer);
-    console.log("[EXPORT] ✅ Excel enviado correctamente");
-  } catch (error) {
-    console.error("[EXPORT] ❌ Error interno en exportación:", error);
-    if (error.name === 'CastError' && error.path === 'employee') {
-      res.status(500).json({ message: 'Error de datos: Algunos registros de tiempo tienen un ID de empleado inválido.' });
-    } else {
-      res.status(500).json({ message: 'Error al generar el archivo Excel' });
-    }
-  }
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename=${fileName}`);
+    
+    await workbook.xlsx.write(res);
+    res.end();
 });
 
 // Bloque X (Nuevo): Obtener el total global a pagar a todos los mensajeros
@@ -430,7 +434,6 @@ const getTotalReceivablesFromClients = asyncHandler(async (req, res) => {
   res.json({ totalReceivablesFromClients: totalReceivables });
 });
 
-// ✅ REEMPLAZAR el Bloque 10 completo con esta versión.
 const markTimeLogAsPaid = asyncHandler(async (req, res) => {
     try {
         const timeLog = await TimeLog.findById(req.params.id);
@@ -483,14 +486,14 @@ const markTimeLogAsPaid = asyncHandler(async (req, res) => {
 
 // Bloque 11: Exportación de Controladores
 module.exports = {
-  createTimeLog,
-  getTimeLogsByEmployeeId,
-  updateTimeLog,
-  deleteTimeLog,
-  resetTimeLogs,
-  getTimeLogsByClient,
-  exportTimeLogsToExcelForEmployee,
-  getTotalPaymentsToEmployees,
-  getTotalReceivablesFromClients,
-  markTimeLogAsPaid, // <-- ¡Ahora la función está definida y exportada!
+    createTimeLog,
+    getTimeLogsByEmployeeId,
+    updateTimeLog,
+    deleteTimeLog,
+    resetTimeLogs,
+    getTimeLogsByClient,
+    exportTimeLogsToExcelForEmployee, // <-- Función actualizada
+    getTotalPaymentsToEmployees,
+    getTotalReceivablesFromClients,
+    markTimeLogAsPaid,
 };

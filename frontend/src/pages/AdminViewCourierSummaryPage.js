@@ -1,38 +1,43 @@
-// frontend/src/pages/RepartidorSummaryDashboardPage.js
+// frontend/src/pages/AdminViewCourierSummaryPage.js / para el admin ver el dashboard el repartidor 
 
-// Bloque 1
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { toast } from 'react-toastify';
 import API from '../api/api';
 import LoadingSpinner from '../components/LoadingSpinner';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom'; // ✅ Cambio: Importamos useParams
 import '../index.css';
 
-// Bloque 2
-const RepartidorSummaryDashboardPage = () => {
-    const { user, loading: authLoading } = useAuth();
+const AdminViewCourierSummaryPage = () => {
+    const { user } = useAuth();
     const navigate = useNavigate();
+    const { employeeId } = useParams(); // ✅ Cambio clave: Obtenemos el ID del repartidor desde la URL
+
+    const [employeeName, setEmployeeName] = useState(''); // ✅ Nuevo: Para guardar el nombre del repartidor
     const [totalPagar, setTotalPagar] = useState(0);
     const [pageLoading, setPageLoading] = useState(true);
     const [error, setError] = useState(null);
 
-    // Bloque 3
-    const fetchRepartidorSummary = useCallback(async () => {
-        if (!user || !user.profile || !user.profile._id) {
-            setError('Perfil de repartidor no encontrado. Acceso denegado.');
+    // ✅ Cambio clave: La lógica para buscar datos ahora es para el admin
+    const fetchCourierSummaryForAdmin = useCallback(async () => {
+        if (!employeeId) {
+            setError('ID de empleado no encontrado en la URL.');
             setPageLoading(false);
             return;
         }
 
         try {
-            const res = await API.get(`/api/timelogs/employee/${user.profile._id}`);
-            const timeLogs = res.data;
+            // 1. Obtenemos los detalles del empleado para saber su nombre
+            const employeeRes = await API.get(`/api/employees/${employeeId}`);
+            setEmployeeName(employeeRes.data.fullName);
 
+            // 2. Obtenemos sus registros de tiempo
+            const timeLogsRes = await API.get(`/api/timelogs/employee/${employeeId}`);
+            const timeLogs = timeLogsRes.data;
+
+            // 3. Calculamos el total a pagar (solo de registros no pagados)
             let sumTotal = 0;
-
             const unpaidLogs = timeLogs.filter(log => !log.isPaid);
-
             unpaidLogs.forEach(log => {
                 const valorNeto = log.valorNeto || 0;
                 const totalLoanDeducted = log.totalLoanDeducted || 0;
@@ -40,72 +45,59 @@ const RepartidorSummaryDashboardPage = () => {
             });
 
             setTotalPagar(sumTotal);
-            setPageLoading(false);
-
+            
         } catch (err) {
-            console.error("ERROR RepartidorSummaryDashboard: Fallo al cargar el resumen:", err.response?.data?.message || err.message);
-            setError(err.response?.data?.message || "Error al cargar el resumen del repartidor.");
-            toast.error(err.response?.data?.message || "Error al cargar el resumen.");
+            toast.error(err.response?.data?.message || "Error al cargar el resumen del repartidor.");
+            setError(err.response?.data?.message || "Error al cargar el resumen.");
+        } finally {
             setPageLoading(false);
         }
-    }, [user]);
+    }, [employeeId]); // La dependencia ahora es el employeeId de la URL
 
-    // Bloque 4
     useEffect(() => {
-        if (!authLoading) {
-            fetchRepartidorSummary();
-        }
-    }, [authLoading, fetchRepartidorSummary]);
+        fetchCourierSummaryForAdmin();
+    }, [fetchCourierSummaryForAdmin]);
 
-    // Bloque 5
     const handleExportExcel = async () => {
-        if (!user || !user.profile || !user.profile._id) {
-            toast.error('No se pudo identificar el repartidor para exportar.');
-            return;
-        }
+        // ✅ Cambio: Usamos el employeeId de la URL
         try {
             toast.info('Generando reporte Excel...');
-            
-            const response = await API.get(`/api/timelogs/export/${user.profile._id}`, { 
+            const response = await API.get(`/api/timelogs/export/${employeeId}`, { 
                 responseType: 'blob',
             });
-
             const url = window.URL.createObjectURL(new Blob([response.data]));
             const link = document.createElement('a');
             link.href = url;
-            link.setAttribute('download', `reporte_horarios_${user.profile.fullName || user.username}.xlsx`);
+            link.setAttribute('download', `reporte_horarios_${employeeName}.xlsx`);
             document.body.appendChild(link);
             link.click();
             link.remove();
             window.URL.revokeObjectURL(url);
             toast.success('Reporte Excel descargado con éxito.');
         } catch (err) {
-            console.error("ERROR RepartidorSummaryDashboard: Fallo al exportar Excel:", err.response?.data?.message || err.message);
             toast.error(err.response?.data?.message || "Error al exportar a Excel.");
         }
     };
-
-    // Bloque 6
-    const handleGoToRegisterPage = () => {
-        if (user && user.profile && user.profile._id) {
-            navigate(`/repartidor-records`);
-        } else {
-            toast.error('No se pudo identificar el repartidor para ir a la página de registro.');
-        }
+    
+    // ✅ Cambio clave: Este botón ahora lleva a la OTRA página espejo (la de registros detallados)
+    const handleGoToRecordsPage = () => {
+        // La ruta debe ser la de la página de registros del repartidor,
+        // y le pasamos el ID para que sepa de quién mostrar los registros.
+        navigate(`/admin/view-employee-history/${employeeId}`);
     };
 
-    // Bloque 7
     if (pageLoading) return <LoadingSpinner />;
     if (error) return <div className="error-message">Error: {error}</div>;
-    if (!user || (user.role !== 'repartidor' && user.role !== 'admin')) {
-        return <div className="error-message">Acceso denegado. Esta página es solo para repartidores o administradores.</div>;
+
+    if (user?.role !== 'admin') {
+        return <div className="error-message">Acceso denegado.</div>;
     }
 
-    // Bloque 8
     return (
         <div className="dashboard-page-wrapper">
             <div className="dashboard-card">
-                <h3>Resumen de Pagos - {user.profile?.fullName || user.username}</h3>
+                {/* ✅ Cambio: El título ahora usa el nombre del empleado que obtuvimos */}
+                <h3>Resumen de Pagos - {employeeName}</h3>
                 <div style={{
                     backgroundColor: '#e6f7ff',
                     border: '1px solid #91d5ff',
@@ -121,12 +113,12 @@ const RepartidorSummaryDashboardPage = () => {
                 </div>
                 <div style={{ display: 'flex', gap: '10px', marginTop: '20px', justifyContent: 'center' }}>
                     <button onClick={handleExportExcel} className="button-primary">Exportar a Excel</button>
-                    <button onClick={handleGoToRegisterPage} className="button-success">Registrar Horario</button>
+                    {/* ✅ Cambio: El botón ahora se llama "Ver Registros" y usa la nueva función */}
+                    <button onClick={handleGoToRecordsPage} className="button-success">Ver Registros</button>
                 </div>
             </div>
         </div>
     );
 };
 
-// Bloque 9
-export default RepartidorSummaryDashboardPage;
+export default AdminViewCourierSummaryPage; // ✅ Cambio: No olvides cambiar el nombre de la exportación

@@ -1,80 +1,165 @@
+/* ==========================================================================
+   Estilos Generales de la Página y Formularios
+   ========================================================================== */
 
-/* Estilos para el contenedor de la página */
 .time-entry-page-wrapper {
   padding: 1rem;
 }
 
-/* Estilo para el contenedor de la tabla para que tenga scroll horizontal */
-.table-responsive-container {
-    width: 100%;
-    overflow-x: auto;
-}
-
-/* Define un ancho mínimo para la tabla para que no se vea aplastada */
-.table-responsive-container table {
-    min-width: 700px; /* Puedes ajustar este valor si lo necesitas */
-    border-collapse: collapse;
-    width: 100%;
-}
-
-/* Estilos para las celdas de la tabla */
-.table-responsive-container th,
-.table-responsive-container td {
-    border: 1px solid #ddd;
-    padding: 8px;
-    text-align: left;
-}
-
-/* Estilos de las filas impares */
-.table-responsive-container tr:nth-child(even) {
-    background-color: #f2f2f2;
-}
-
-/* Estilos para los botones de acción dentro de la tabla */
-.action-buttons {
-    white-space: nowrap;
-}
-
-/* Estilos para los formularios */
 .time-entry-form-wrapper .form-row {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 1rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
 }
 
 .time-entry-form-wrapper .form-group-half {
-    flex: 1 1 calc(50% - 1rem);
-    box-sizing: border-box;
+  flex: 1 1 calc(50% - 1rem);
+  box-sizing: border-box;
 }
 
-/* Media query para móviles */
-@media (max-width: 600px) {
-    .time-entry-form-wrapper .form-group-half {
-        flex: 1 1 100%;
-    }
-}
-/* Estilo para el botón de "Pagado" */
-.btn-pagado {
-    background-color: #080b08;
-    color: rgb(2, 3, 3);
-    border: none;
-    padding: 8px 12px;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 0.9rem;
-    transition: background-color 0.3s ease;
+/* ==========================================================================
+   Estilos de la Tabla Principal
+   ========================================================================== */
+
+.table-responsive-container {
+  width: 100%;
+  overflow-x: auto;
 }
 
-.btn-pagado:hover {
-    background-color: #111511;
+.table-responsive-container table {
+  min-width: 800px; /* Aumentado un poco para dar más espacio */
+  border-collapse: collapse;
+  width: 100%;
 }
-.paid-label {
-    display: inline-block;
-    padding: 5px 10px;
-    background-color: #3008e1; /* Color verde de éxito */
-    color: white;
+
+.table-responsive-container th,
+.table-responsive-container td {
+  border: 1px solid #ddd;
+  padding: 12px; /* Un poco más de espacio */
+  text-align: left;
+  vertical-align: middle;
+}
+
+.table-responsive-container thead th {
+    background-color: #f8f9fa;
     font-weight: bold;
-    border-radius: 5px;
-    font-size: 0.8em;
-    text-transform: uppercase;
+}
+
+.table-responsive-container tbody tr:nth-child(even) {
+  background-color: #f2f2f2;
+}
+
+/* ==========================================================================
+   Botones de Acción y Etiquetas de Estado (Badges)
+   ========================================================================== */
+
+.action-buttons {
+  white-space: nowrap; /* Evita que los botones se partan en dos líneas */
+  text-align: right;   /* Alinea los botones a la derecha de la celda */
+}
+
+/* Botón para marcar como pagado (Fondo Negro) */
+.button-paid {
+  background-color: #212529; /* Negro */
+  color: white;
+  border-color: #212529;
+}
+
+.button-paid:hover {
+  background-color: #424649; /* Negro un poco más claro */
+}
+
+/* Etiqueta para registros ya liquidados (Fondo Azul) */
+.paid-badge {
+  display: inline-block;
+  padding: 5px 10px;
+  background-color: #070b07; /* Azul primario */
+  color: white;
+  border-radius: 5px; /* CORREGIDO */
+  font-weight: bold;
+  font-size: 0.8em;
+  text-align: center;
+}
+
+/* Etiqueta para registros pendientes (Fondo Verde) */
+.pending-badge {
+  display: inline-block;
+  padding: 5px 10px;
+  background-color: #28a745; /* Verde */
+  color: white;
+  border-radius: 5px; /* CORREGIDO */
+  font-weight: bold;
+  font-size: 0.8em;
+  text-align: center;
+}
+
+
+/* ==========================================================================
+   Estilos del Pie de Tabla (tfoot) y Caja de Resumen
+   ========================================================================== */
+
+tfoot {
+  border-top: 2px solid #333;
+  font-weight: bold;
+  background-color: #f9f9f9;
+}
+
+tfoot td {
+    padding: 8px 15px;
+    border-top: 1px solid #e9e9e9;
+}
+
+.summary-label {
+  text-align: right;
+  color: #555;
+}
+
+.summary-value {
+  text-align: right;
+  color: #222;
+}
+
+.total-row td {
+  font-weight: bold;
+  font-size: 1.1rem;
+  color: #000;
+  padding-top: 12px;
+  padding-bottom: 12px;
+}
+
+/* Estilos para la caja de totales (si no se usa tfoot) */
+.totals-summary-box {
+  border-top: 1px solid #ccc;
+  padding-top: 1rem;
+  margin-top: 1rem;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end; /* Alinea los items a la derecha */
+}
+
+.total-item {
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
+  max-width: 350px; /* Ancho máximo para el resumen */
+  padding: 4px 0;
+}
+
+.grand-total {
+  font-weight: bold;
+  font-size: 1.1rem;
+  border-top: 2px solid #333;
+  margin-top: 8px;
+  padding-top: 8px;
+}
+
+
+/* ==========================================================================
+   Media Queries para Móviles
+   ========================================================================== */
+
+@media (max-width: 600px) {
+  .time-entry-form-wrapper .form-group-half {
+    flex: 1 1 100%;
+  }
 }

@@ -23,6 +23,9 @@ const DashboardPage = () => {
     const [defaultHourlyRate, setDefaultHourlyRate] = useState('');
     const [holidayHourlyRate, setHolidayHourlyRate] = useState('');
     const isAdminView = user?.role === 'admin' && clientId;
+    const [reportStartDate, setReportStartDate] = useState('');
+    const [reportEndDate, setReportEndDate] = useState('');
+    const [isGeneratingReport, setIsGeneratingReport] = useState(false);
 
     const pageTitle = isAdminView
         ? `Gestionando Dashboard de: ${clientProfile?.companyName || 'Cliente'}`
@@ -30,39 +33,42 @@ const DashboardPage = () => {
 
     // --- Lógica de Datos (Corregida y Organizada) ---
     const fetchDashboardData = useCallback(async () => {
-        setLoading(true);
-        setError('');
-        try {
-            const targetClientId = isAdminView ? clientId : user.profile._id;
-            if (!targetClientId) {
-                setLoading(false);
-                return;
-            }
-            if (isAdminView) {
-                const { data } = await API.get(`/admin/client-dashboard/${targetClientId}`);
-                setClientProfile(data.clientProfile);
-                setDashboardData(data.dashboardData);
-                setAuxiliaries(data.auxiliaries);
-                setDefaultHourlyRate(data.clientProfile.defaultHourlyRate?.toString() || '0');
-                setHolidayHourlyRate(data.clientProfile.holidayHourlyRate?.toString() || '0');
-            } else if (user?.role === 'cliente') {
-                const { data: clientProfileResData } = await API.get(`/clients/${targetClientId}`);
-                setClientProfile(clientProfileResData);
-                setDefaultHourlyRate(clientProfileResData.defaultHourlyRate?.toString() || '0');
-                setHolidayHourlyRate(clientProfileResData.holidayHourlyRate?.toString() || '0');
-                const { data: dashboardResData } = await API.get('/clients/dashboard');
-                setDashboardData(dashboardResData);
-                const { data: auxiliariesResData } = await API.get('/clients/me/auxiliaries');
-                setAuxiliaries(auxiliariesResData);
-            }
-        } catch (err) {
-            const errorMessage = err.response?.data?.message || 'Error al cargar los datos.';
-            setError(errorMessage);
-            toast.error(errorMessage);
-        } finally {
+    setLoading(true);
+    setError('');
+    try {
+        const targetClientId = isAdminView ? clientId : user.profile._id;
+        if (!targetClientId) {
             setLoading(false);
+            return;
         }
-    }, [user, clientId, isAdminView]);
+
+        if (isAdminView) {
+            const { data } = await API.get(`/api/admin/client-dashboard/${targetClientId}`);
+            setClientProfile(data.clientProfile);
+            setDashboardData(data.dashboardData);
+            setAuxiliaries(data.auxiliaries);
+            setDefaultHourlyRate(data.clientProfile.defaultHourlyRate?.toString() || '0');
+            setHolidayHourlyRate(data.clientProfile.holidayHourlyRate?.toString() || '0');
+        } else if (user?.role === 'cliente') {
+            const { data: clientProfileResData } = await API.get(`/api/clients/${targetClientId}`);
+            setClientProfile(clientProfileResData);
+            setDefaultHourlyRate(clientProfileResData.defaultHourlyRate?.toString() || '0');
+            setHolidayHourlyRate(clientProfileResData.holidayHourlyRate?.toString() || '0');
+            
+            const { data: dashboardResData } = await API.get('/api/clients/dashboard');
+            setDashboardData(dashboardResData);
+
+            const { data: auxiliariesResData } = await API.get('/api/clients/me/auxiliaries');
+            setAuxiliaries(auxiliariesResData);
+        }
+    } catch (err) {
+        const errorMessage = err.response?.data?.message || 'Error al cargar los datos.';
+        setError(errorMessage);
+        toast.error(errorMessage);
+    } finally {
+        setLoading(false);
+    }
+}, [user, clientId, isAdminView]);
 
     useEffect(() => {
         if (user) {
@@ -76,7 +82,7 @@ const DashboardPage = () => {
     const targetClientId = isAdminView ? clientId : user.profile._id;
     if (window.confirm(`¿Estás seguro de que quieres actualizar las tarifas?`)) {
         try {
-            await API.put(`/clients/${targetClientId}/hourly-rates`, {
+            await API.put(`/api/clients/${targetClientId}/hourly-rates`, {
                 defaultHourlyRate: parseFloat(defaultHourlyRate),
                 holidayHourlyRate: parseFloat(holidayHourlyRate)
             });
@@ -87,24 +93,25 @@ const DashboardPage = () => {
     }
 };
 
-   const handleRegisterAuxiliary = async (e) => {
+  const handleRegisterAuxiliary = async (e) => {
     e.preventDefault();
     if (!auxiliaryUsername || !auxiliaryPassword) {
         toast.error('Por favor, ingresa un usuario y contraseña para el auxiliar.');
         return;
     }
     try {
-        // ✅ RUTA CORREGIDA: Apunta a la ruta de autenticación que creamos para esto
-        await API.post('/auth/register-auxiliary-by-client', {
+        // ✅ CAMBIO: Ahora enviamos el clientId que el admin está viendo
+        await API.post('/api/auth/register-auxiliary-by-client', {
             username: auxiliaryUsername,
             password: auxiliaryPassword,
+            clientId: isAdminView ? clientId : null // Envía el ID del cliente si es admin
         });
         toast.success('¡Auxiliar registrado y asociado con éxito!');
         
         setShowRegisterAuxiliaryModal(false);
         setAuxiliaryUsername('');
         setAuxiliaryPassword('');
-        fetchDashboardData(); // Refresca la lista de auxiliares
+        fetchDashboardData();
 
     } catch (err) {
         toast.error(err.response?.data?.message || 'Error al registrar el auxiliar.');
@@ -112,36 +119,38 @@ const DashboardPage = () => {
 };
 
 const handleDeleteAuxiliary = async (auxiliaryId) => {
-    if (window.confirm('¿Estás seguro de que quieres eliminar este auxiliar?')) {
-        try {
-            let apiUrl = '';
-            // Si es el admin, usa la nueva ruta de admin
-            if (isAdminView) {
-                apiUrl = `/admin/auxiliaries/${auxiliaryId}`;
-            } 
-            // Si es el cliente, usa su ruta original
-            else {
-                apiUrl = `/auth/auxiliaries/${auxiliaryId}`;
+        if (window.confirm('¿Estás seguro de que quieres eliminar este auxiliar?')) {
+            try {
+                let apiUrl = '';
+                // Construye la ruta de la API correcta, con /api/
+                if (isAdminView) {
+                    apiUrl = `/api/admin/auxiliaries/${auxiliaryId}`;
+                } else {
+                    apiUrl = `/api/auth/auxiliaries/${auxiliaryId}`;
+                }
+                await API.delete(apiUrl);
+                toast.success('Auxiliar eliminado con éxito.');
+                fetchDashboardData();
+            } catch (err) {
+                toast.error(err.response?.data?.message || 'Error al eliminar el auxiliar.');
             }
-
-            await API.delete(apiUrl);
-            toast.success('Auxiliar eliminado con éxito.');
-            fetchDashboardData(); // Refresca la lista
-        } catch (err) {
-            toast.error(err.response?.data?.message || 'Error al eliminar el auxiliar.');
         }
-    }
-};
+    };
+
 
     const handleRegisterEmployeeClick = () => {
-        const path = isAdminView ? `/admin/register-employee-for/${clientId}` : '/register-employee';
-        navigate(path);
-    };
+    // Esta lógica ahora apunta a las rutas separadas y correctas
+    const path = isAdminView 
+        ? `/admin/register-employee-for/${clientId}` // Ruta del Admin
+        : '/register-employee';                     // Ruta del Cliente
+        
+    navigate(path);
+};
 
     const handleDeleteEmployee = async (employeeId, employeeName) => {
         if (window.confirm(`¿Estás seguro de que quieres eliminar a ${employeeName}?`)) {
             try {
-                await API.delete(`/employees/${employeeId}`);
+                await API.delete(`/api/employees/${employeeId}`);
                 toast.success(`Mensajero ${employeeName} eliminado.`);
                 fetchDashboardData();
             } catch (err) {
@@ -151,33 +160,70 @@ const handleDeleteAuxiliary = async (auxiliaryId) => {
     };
 
     const handleExportToExcel = async () => {
-        try {
-            const targetClientId = isAdminView ? clientId : user.profile._id;
-            const response = await API.get(`/clients/${targetClientId}/export`, { responseType: 'blob' });
-            const url = window.URL.createObjectURL(new Blob([response.data]));
-            const link = document.createElement('a');
-            link.href = url;
-            let fileName = 'reporte_cliente.xlsx';
-            const contentDisposition = response.headers['content-disposition'];
-            if (contentDisposition) {
-                const fileNameMatch = contentDisposition.match(/filename="(.+)"/);
-                if (fileNameMatch && fileNameMatch.length > 1) fileName = fileNameMatch[1];
-            }
-            link.setAttribute('download', fileName);
-            document.body.appendChild(link);
-            link.click();
-            link.remove();
-        } catch (err) {
-            toast.error(err.response?.data?.message || 'Error al exportar a Excel.');
+    // --- PASO DE DEPURACIÓN ---
+    console.log('Botón presionado. Fecha de inicio actual:', reportStartDate);
+    console.log('Botón presionado. Fecha de fin actual:', reportEndDate);
+
+    if (!reportStartDate || !reportEndDate) {
+        console.log('¡La validación ha fallado! Una o ambas fechas están vacías.');
+        toast.error("Por favor, selecciona una fecha de inicio y de fin para el reporte.");
+        return; // Detiene la ejecución aquí
+    }
+
+    console.log('Validación exitosa. Realizando llamada a la API con las fechas...');
+    setIsGeneratingReport(true);
+    try {
+        const targetClientId = isAdminView ? clientId : user.profile._id;
+        
+        const response = await API.get(`/api/clients/${targetClientId}/export`, {
+            params: {
+                startDate: reportStartDate,
+                endDate: reportEndDate
+            },
+            responseType: 'blob'
+        });
+
+        const url = window.URL.createObjectURL(new Blob([response.data]));
+        const link = document.createElement('a');
+        link.href = url;
+        
+        const contentDisposition = response.headers['content-disposition'];
+        let fileName = 'reporte_cliente.xlsx';
+        if (contentDisposition) {
+            const fileNameMatch = contentDisposition.match(/filename="(.+)"/);
+            if (fileNameMatch && fileNameMatch.length > 1) fileName = fileNameMatch[1];
         }
-    };
+        
+        link.setAttribute('download', fileName);
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        toast.success("Reporte generado con éxito.");
+
+    } catch (err) {
+        if (err.response && err.response.data && err.response.data.toString() === '[object Blob]') {
+            const errorBlob = err.response.data;
+            const errorText = await errorBlob.text();
+            try {
+                const errorJson = JSON.parse(errorText);
+                toast.error(errorJson.message || 'Error al generar el reporte.');
+            } catch (jsonError) {
+                toast.error('Ocurrió un error inesperado.');
+            }
+        } else {
+             toast.error(err.response?.data?.message || 'Error al generar el reporte.');
+        }
+    } finally {
+        setIsGeneratingReport(false);
+    }
+};
 
     const handleSettleClientTotal = async () => {
         const targetClientId = isAdminView ? clientId : user.profile._id;
         if (window.confirm(`¿Estás seguro de que quieres liquidar el total para ${clientProfile?.companyName}?`)) {
             try {
                 toast.info('Procesando liquidación...');
-                await API.post(`/admin/settle-client/${targetClientId}`);
+                await API.post(`/api/admin/settle-client/${targetClientId}`);
                 toast.success('Liquidación completada.');
                 fetchDashboardData();
             } catch (err) {
@@ -301,9 +347,25 @@ const handleDeleteAuxiliary = async (auxiliaryId) => {
 
             <div className="dashboard-card" style={{ marginTop: '2rem' }}>
                 <h2>Reportes</h2>
-                <button onClick={handleExportToExcel} className="button-primary">Exportar Registros a Excel</button>
+                <div className="report-generator-box">
+                    <h4 style={{marginTop: 0, marginBottom: '15px'}}>Generar Reporte de Facturación</h4>
+                    <div style={{ display: 'flex', gap: '20px', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'center' }}>
+                        <div className="form-group">
+                            <label>Fecha de Inicio:</label>
+                            <input type="date" value={reportStartDate} onChange={(e) => setReportStartDate(e.target.value)} />
+                        </div>
+                        <div className="form-group">
+                            <label>Fecha de Fin:</label>
+                            <input type="date" value={reportEndDate} onChange={(e) => setReportEndDate(e.target.value)} />
+                        </div>
+                        <button onClick={handleExportToExcel} className="button-primary" disabled={isGeneratingReport}>
+                            {isGeneratingReport ? 'Generando...' : 'Exportar a Excel'}
+                        </button>
+                    </div>
+                </div>
             </div>
-        </div>
+            
+        </div> // <-- Cierre del dashboard-container
     );
 };
 

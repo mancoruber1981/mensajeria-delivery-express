@@ -27,7 +27,7 @@ function ContadorPage() {
 
         try {
             const response = await API.get(
-                `/admin/accountant-report?startDate=${startDate}&endDate=${endDate}`
+                `/api/admin/accountant-report?startDate=${startDate}&endDate=${endDate}`
             );
             
             const { transactions, totalIncome, totalExpense, finalBalance } = response.data;
