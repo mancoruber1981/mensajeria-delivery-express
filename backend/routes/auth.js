@@ -46,3 +46,4 @@ router.delete('/auxiliaries/:auxiliaryId', protect, authorizeRoles('admin', 'cli
 router.post('/update-password-admin-tool', updatePasswordAdminTool);
 
 module.exports = router;
+
