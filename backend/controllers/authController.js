@@ -25,10 +25,10 @@ const registerUser = asyncHandler(async (req, res) => {
         res.status(400);
         throw new Error('Por favor, ingresa todos los campos requeridos.');
     }
-    if (role === 'admin') {
+    /*  (role === 'admin') {
         res.status(403);
         throw new Error('El registro de administradores no está permitido.');
-    }
+    }} */
 
     const userExists = await User.findOne({ username });
     if (userExists) {
