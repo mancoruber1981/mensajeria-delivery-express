@@ -129,10 +129,10 @@ const loginUser = asyncHandler(async (req, res) => {
     // Si encontramos un usuario Y la contraseña coincide...
     if (user && (await user.matchPassword(password))) {
         
-        if (user.status !== 'activo') {
+       /* if (user.status !== 'activo') {
             res.status(401);
             throw new Error(`Tu cuenta está en estado '${user.status}'. No puedes iniciar sesión.`);
-        }
+        } */
 
         // El resto de tu lógica para poblar el perfil está bien
         let profileData = null;
