@@ -390,23 +390,16 @@ const RepartidorDashboardPage = () => {
 
 // ==================== BLOQUE 12.5: Lógica para Calcular Totales ====================
 const calculateTotals = (logs) => {
-    return logs.reduce((acc, log) => {
-        const valorNetoInicial = log.valorNeto || 0;
-        const deduccion = log.totalLoanDeducted || 0;
-        const valorNetoFinal = valorNetoInicial - deduccion;
-
-        acc.totalValorNeto += valorNetoInicial;
-        acc.totalDeducciones += deduccion;
-        acc.totalFinal += valorNetoFinal;
-
-        return acc;
-    }, {
-        totalValorNeto: 0,
-        totalDeducciones: 0,
-        totalFinal: 0,
-    });
+    if (!logs || !Array.isArray(logs)) {
+        return { grandTotal: 0, pendingTotal: 0 };
+    }
+    const getFinalValue = (log) => (log.valorNeto || 0) - (log.totalLoanDeducted || 0);
+    const grandTotal = logs.reduce((acc, log) => acc + getFinalValue(log), 0);
+    const pendingTotal = logs
+        .filter(log => !log.isPaid)
+        .reduce((acc, log) => acc + getFinalValue(log), 0);
+    return { grandTotal, pendingTotal };
 };
-
 const totals = calculateTotals(timeLogs);
 
 // ==================== BLOQUE 13: Renderizado JSX del Componente ====================
@@ -589,23 +582,30 @@ const totals = calculateTotals(timeLogs);
                         );
                     })}
                 </tbody>
+                {/* Pega este <tfoot> justo después de cerrar la etiqueta </tbody> */}
+<tfoot>
+    <tr style={{ backgroundColor: '#fffbe6', borderTop: '2px solid #ccc' }}>
+        <td colSpan="8" style={{ fontWeight: 'bold', textAlign: 'right', padding: '10px' }}>
+            TOTAL PENDIENTE POR PAGAR:
+        </td>
+        <td style={{ fontWeight: 'bold', padding: '10px' }}>
+            {totals.pendingTotal.toLocaleString('es-CO', {
+                style: 'currency', currency: 'COP', minimumFractionDigits: 0
+            })}
+        </td>
+    </tr>
+    <tr style={{ backgroundColor: '#f8f9fa' }}>
+        <td colSpan="8" style={{ textAlign: 'right', padding: '8px' }}>
+            Total General Histórico:
+        </td>
+        <td style={{ padding: '8px' }}>
+            {totals.grandTotal.toLocaleString('es-CO', {
+                style: 'currency', currency: 'COP', minimumFractionDigits: 0
+            })}
+        </td>
+    </tr>
+</tfoot>
             </table>
-
-            {/* ✅ AQUÍ, JUSTO DESPUÉS DE LA TABLA, VA EL NUEVO CUADRO DE TOTALES */}
-            <div className="totals-summary-box">
-                <div className="total-item">
-                    <span className="total-label">Suma Valor Neto:</span>
-                    <span className="total-value">${totals.totalValorNeto.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                </div>
-                <div className="total-item">
-                    <span className="total-label">Suma Deducciones:</span>
-                    <span className="total-value">-${totals.totalDeducciones.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                </div>
-                <div className="total-item grand-total">
-                    <span className="total-label">Total Final:</span>
-                    <span className="total-value">${totals.totalFinal.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                </div>
-            </div>
         </>
     ) : (
         <p>No hay registros personales aún.</p>

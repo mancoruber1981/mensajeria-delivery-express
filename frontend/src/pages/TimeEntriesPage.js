@@ -329,20 +329,19 @@ const TimeEntriesPage = () => {
         }
     };
 
-    const totals = timeLogs.reduce((acc, log) => {
-        const valorNetoInicial = log.valorNeto || 0;
-        const deduccion = log.totalLoanDeducted || 0;
-        
-        acc.totalValorNeto += valorNetoInicial;
-        acc.totalDeducciones += deduccion;
-        acc.totalFinal += (valorNetoInicial - deduccion);
+    const calculateTotals = (logs) => {
+    if (!logs) return { grandTotal: 0, pendingTotal: 0 }; 
+    
+    const grandTotal = logs.reduce((acc, log) => acc + (log.valorNetoFinal || 0), 0);
+    const pendingTotal = logs.reduce((acc, log) => acc + (log.isPaid ? 0 : (log.valorNetoFinal || 0)), 0);
+    
+    return {
+        grandTotal,
+        pendingTotal,
+    };
+};
 
-        return acc;
-    }, {
-        totalValorNeto: 0,
-        totalDeducciones: 0,
-        totalFinal: 0,
-    });
+const totals = calculateTotals(timeLogs);
 
 // Bloque 11: Renderizado del Componente - Contenedor Principal
     return (
@@ -534,37 +533,30 @@ const TimeEntriesPage = () => {
                             {/* ========== INICIO: CÓDIGO A AÑADIR (PASO 2) ========== */}
                             { !isAuxiliar && timeLogs.length > 0 && (
                                 <tfoot>
-                                    <tr>
-                                        <td colSpan="7" className="summary-label">Suma Valor Neto:</td>
-                                        <td className="summary-value">
-                                            {totals.totalValorNeto.toLocaleString('es-CO', {
-                                                style: 'currency',
-                                                currency: 'COP',
-                                            })}
-                                        </td>
-                                        <td></td> {/* Celda vacía para la columna de Acciones */}
-                                    </tr>
-                                    <tr>
-                                        <td colSpan="7" className="summary-label">Suma Deducciones:</td>
-                                        <td className="summary-value">
-                                            {totals.totalDeducciones.toLocaleString('es-CO', {
-                                                style: 'currency',
-                                                currency: 'COP',
-                                            })}
-                                        </td>
-                                        <td></td> {/* Celda vacía para la columna de Acciones */}
-                                    </tr>
-                                    <tr className="total-row">
-                                        <td colSpan="7" className="summary-label">Total Final:</td>
-                                        <td className="summary-value">
-                                            {totals.totalFinal.toLocaleString('es-CO', {
-                                                style: 'currency',
-                                                currency: 'COP',
-                                            })}
-                                        </td>
-                                        <td></td> {/* Celda vacía para la columna de Acciones */}
-                                    </tr>
-                                </tfoot>
+    <tr style={{ backgroundColor: '#fffbe6', borderTop: '2px solid #ccc' }}>
+        {/* Ajusta el 'colSpan' al número de columnas de tu tabla menos las de totales y acciones */}
+        <td colSpan="7" style={{ fontWeight: 'bold', textAlign: 'right', padding: '10px' }}>
+            TOTAL PENDIENTE POR PAGAR:
+        </td>
+        <td style={{ fontWeight: 'bold', padding: '10px' }}>
+            {totals.pendingTotal.toLocaleString('es-CO', {
+                style: 'currency', currency: 'COP'
+            })}
+        </td>
+        <td></td> {/* Celda vacía para la columna de Acciones */}
+    </tr>
+    <tr style={{ backgroundColor: '#f8f9fa' }}>
+        <td colSpan="7" style={{ textAlign: 'right', padding: '8px' }}>
+            Total General Histórico:
+        </td>
+        <td style={{ padding: '8px' }}>
+            {totals.grandTotal.toLocaleString('es-CO', {
+                style: 'currency', currency: 'COP'
+            })}
+        </td>
+        <td></td> {/* Celda vacía para la columna de Acciones */}
+    </tr>
+</tfoot>
                             )}
                             {/* ========== FIN: CÓDIGO A AÑADIR (PASO 2) ========== */}
 

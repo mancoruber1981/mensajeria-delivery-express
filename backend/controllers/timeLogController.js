@@ -8,112 +8,41 @@ const Client = require('../models/Client');
 const User = require('../models/User');
 const ExcelJS = require('exceljs'); 
 const { generateTimeLogExcelReport } = require('../utils/excelGenerator');
+const { calculateTimeLogValues } = require('../utils/calculationUtils.js');
 
 // Bloque 2: Crear un nuevo registro de horario (Versión Corregida)
 const createTimeLog = asyncHandler(async (req, res) => {
-    console.log('\n--- INTENTO DE CREAR UN NUEVO REGISTRO DE HORARIO ---');
-    console.log('Datos recibidos del frontend (req.body):', req.body);
-    try {
-        // Aceptamos los valores calculados desde el frontend
-        const {
-            employee: employeeId,
-            date,
-            horaInicio,
-            horaFin,
-            festivo,
-            minutosAlmuerzoSinPago,
-            empresa,
-            totalLoanDeducted,
-            horasBrutas,
-            subtotal,
-            valorNeto,
-            valorFinalConDeducciones // Esta variable ya no se usará para el guardado
-        } = req.body;
+    console.log('\n--- 1. INICIANDO createTimeLog ---');
+    console.log('--- 2. DATOS RECIBIDOS (req.body):', req.body);
+    const { 
+        employee, date, horaInicio, horaFin, valorHora, festivo, 
+        descuentoAlmuerzo, minutosAlmuerzoSinPago, empresa, 
+        totalLoanDeducted, // <-- El dato del préstamo
+        horasBrutas, subtotal, valorNeto 
+    } = req.body;
 
-        // ✅ --- INICIO DE LA CORRECCIÓN ---
-        // Se calcula el valor final en el backend para garantizar la integridad del dato.
-        const valorNetoFinalCalculado = (parseFloat(valorNeto) || 0) - (parseFloat(totalLoanDeducted) || 0);
-        // --- FIN DE LA CORRECCIÓN ---
+    // El backend hace el cálculo final para asegurar que es correcto
+    const valorNetoFinalCalculado = (parseFloat(valorNeto) || 0) - (parseFloat(totalLoanDeducted) || 0);
 
-        let { valorHora, descuentoAlmuerzo } = req.body;
-        let clientCompany;
-        let clientUserForTimeLog;
-        let clientProfileObj;
-        const authenticatedUser = req.user;
+    const newTimeLog = await TimeLog.create({
+        employee,
+        user: req.user._id, // Usamos el usuario autenticado
+        date,
+        horaInicio,
+        horaFin,
+        valorHora,
+        festivo,
+        descuentoAlmuerzo,
+        minutosAlmuerzoSinPago,
+        empresa,
+        horasBrutas,
+        subtotal,
+        valorNeto,
+        totalLoanDeducted: parseFloat(totalLoanDeducted) || 0, // Guardamos el préstamo
+        valorNetoFinal: valorNetoFinalCalculado // Guardamos el valor final correcto
+    });
 
-        if (authenticatedUser.role === 'cliente') {
-            clientProfileObj = await Client.findOne({ user: authenticatedUser._id });
-            if (!clientProfileObj) {
-                res.status(404);
-                throw new Error('Perfil de cliente no encontrado.');
-            }
-            clientCompany = clientProfileObj.companyName;
-            clientUserForTimeLog = authenticatedUser._id;
-        } else if (authenticatedUser.role === 'auxiliar') {
-            clientProfileObj = await Client.findById(authenticatedUser.associatedClient);
-            if (!clientProfileObj) {
-                res.status(404);
-                throw new Error('Cliente asociado al auxiliar no encontrado.');
-            }
-            clientCompany = clientProfileObj.companyName;
-            clientUserForTimeLog = clientProfileObj.user;
-        } else if (authenticatedUser.role === 'repartidor') {
-            clientCompany = empresa;
-            clientUserForTimeLog = authenticatedUser._id;
-            if (!authenticatedUser.profile || employeeId !== authenticatedUser.profile._id.toString()) {
-                res.status(403);
-                throw new Error('Un repartidor solo puede registrar horarios para sí mismo.');
-            }
-        } else if (authenticatedUser.role === 'admin') {
-            clientCompany = empresa;
-            clientUserForTimeLog = authenticatedUser._id;
-        } else {
-            res.status(403);
-            throw new Error('Rol no autorizado para crear registros de horario.');
-        }
-
-        if (authenticatedUser.role === 'cliente' || authenticatedUser.role === 'auxiliar') {
-            if (festivo && clientProfileObj.holidayHourlyRate > 0) valorHora = clientProfileObj.holidayHourlyRate;
-            else if (clientProfileObj.defaultHourlyRate > 0) valorHora = clientProfileObj.defaultHourlyRate;
-            else {
-                res.status(400);
-                throw new Error('No se ha configurado una tarifa horaria por defecto para este cliente.');
-            }
-        } else {
-            valorHora = parseFloat(valorHora);
-        }
-
-        const targetEmployee = await Employee.findById(employeeId);
-        if (!targetEmployee) {
-            res.status(404);
-            throw new Error('Empleado no encontrado.');
-        }
-
-        const newTimeLog = await TimeLog.create({
-            employee: targetEmployee._id,
-            user: clientUserForTimeLog,
-            empresa: clientCompany,
-            date,
-            horaInicio,
-            horaFin,
-            valorHora,
-            festivo,
-            descuentoAlmuerzo,
-            minutosAlmuerzoSinPago: parseInt(minutosAlmuerzoSinPago, 10),
-            horasBrutas,
-            subtotal,
-            valorNeto,
-            totalLoanDeducted: parseFloat(totalLoanDeducted) || 0,
-            valorNetoFinal: valorNetoFinalCalculado
-        });
-
-        res.status(201).json(newTimeLog);
-    } catch (error) {
-        if (error.code === 11000) {
-            return res.status(400).json({ success: false, message: 'Error: Ya existe un registro para este empleado en la misma fecha y hora de inicio.' });
-        }
-        throw error;
-    }
+    res.status(201).json(newTimeLog);
 });
 
 // Bloque 3: Obtener registros de horario por empleado
@@ -162,96 +91,40 @@ const getTimeLogsByEmployeeId = asyncHandler(async (req, res) => {
 
 // Bloque 4: Actualizar un registro de horario (Versión Corregida)
 const updateTimeLog = asyncHandler(async (req, res) => {
-  console.log("Datos recibidos para actualizar:", req.body); // <-- Agrega esta línea
-  console.log("--- DEBUG: updateTimeLog (Inicio) ---");
-  const authenticatedUser = req.user;
-  const userRole = authenticatedUser.role;
-  console.log("DEBUG: Rol del usuario autenticado (dentro updateTimeLog):", userRole);
+    const timeLog = await TimeLog.findById(req.params.id);
 
-  const allowedRoles = ['admin', 'repartidor', 'cliente', 'auxiliar'];
-  if (!allowedRoles.includes(userRole)) {
-    console.log("¡ADVERTENCIA DEBUG! Usuario no autorizado por rol (dentro updateTimeLog).");
-    res.status(403);
-    throw new Error(`El rol '${userRole}' no tiene permiso para editar registros.`);
-  }
+    if (!timeLog) {
+        res.status(404);
+        throw new Error('Registro no encontrado');
+    }
 
-  console.log("🔧 PUT/PATCH recibido para ID:", req.params.id);
-  const timeLog = await TimeLog.findById(req.params.id);
-  if (!timeLog) {
-    res.status(404);
-    throw new Error('Registro no encontrado');
-  }
+    // Actualizamos el log con todos los datos que lleguen del formulario
+    const { 
+        date, horaInicio, horaFin, valorHora, festivo, 
+        descuentoAlmuerzo, minutosAlmuerzoSinPago, empresa, 
+        totalLoanDeducted, // <-- El dato del préstamo
+        horasBrutas, subtotal, valorNeto 
+    } = req.body;
 
-  if (userRole === 'repartidor') {
-    if (!authenticatedUser.profile || timeLog.employee.toString() !== authenticatedUser.profile._id.toString()) {
-      res.status(403);
-      throw new Error('Un repartidor solo puede editar sus propios registros.');
-    }
-  } else if (userRole === 'cliente') {
-    const clientProfile = await Client.findOne({ user: authenticatedUser._id });
-    if (!clientProfile || !clientProfile.employees.some(empId => empId.toString() === timeLog.employee.toString())) {
-      res.status(403);
-      throw new Error('Un cliente solo puede editar registros de sus propios empleados.');
-    }
-  } else if (userRole === 'auxiliar') {
-    const clientProfile = await Client.findById(authenticatedUser.associatedClient);
-    if (!clientProfile || !clientProfile.employees.some(empId => empId.toString() === timeLog.employee.toString())) {
-      res.status(403);
-      throw new Error('Un auxiliar solo puede editar registros de los empleados de su cliente asociado.');
-    }
-  } else if (userRole !== 'admin') {
-    res.status(403);
-    throw new Error('No tienes permiso para editar este registro.');
-  }
+    // El backend recalcula el valor final para asegurar consistencia
+    const valorNetoFinalCalculado = (parseFloat(valorNeto) || 0) - (parseFloat(totalLoanDeducted) || 0);
 
-    // Aceptamos los valores calculados desde el frontend
-    const { 
-      date, horaInicio, horaFin, festivo, minutosAlmuerzoSinPago, empresa, totalLoanDeducted,
-      horasBrutas, subtotal, valorNeto, valorFinalConDeducciones // <-- Nuevas variables
-    } = req.body;
+    timeLog.date = date || timeLog.date;
+    timeLog.horaInicio = horaInicio || timeLog.horaInicio;
+    timeLog.horaFin = horaFin || timeLog.horaFin;
+    timeLog.valorHora = valorHora || timeLog.valorHora;
+    timeLog.festivo = festivo ?? timeLog.festivo;
+    timeLog.descuentoAlmuerzo = descuentoAlmuerzo || timeLog.descuentoAlmuerzo;
+    timeLog.minutosAlmuerzoSinPago = minutosAlmuerzoSinPago || timeLog.minutosAlmuerzoSinPago;
+    timeLog.empresa = empresa || timeLog.empresa;
+    timeLog.horasBrutas = horasBrutas || timeLog.horasBrutas;
+    timeLog.subtotal = subtotal || timeLog.subtotal;
+    timeLog.valorNeto = valorNeto || timeLog.valorNeto;
+    timeLog.totalLoanDeducted = totalLoanDeducted || timeLog.totalLoanDeducted;
+    timeLog.valorNetoFinal = valorNetoFinalCalculado; // Guardamos el valor final correcto
 
-    let { valorHora, descuentoAlmuerzo } = req.body;
-
-    if (userRole === 'cliente' || userRole === 'auxiliar') {
-      const clientProfile = userRole === 'cliente'
-        ? await Client.findOne({ user: authenticatedUser._id })
-        : await Client.findById(authenticatedUser.associatedClient);
-
-      if (festivo && clientProfile.holidayHourlyRate > 0) {
-        valorHora = clientProfile.holidayHourlyRate;
-      } else if (clientProfile.defaultHourlyRate > 0) {
-        valorHora = clientProfile.defaultHourlyRate;
-      } else {
-        res.status(400);
-        throw new Error('No se ha configurado una tarifa horaria por defecto para este cliente.');
-      }
-    } else {
-      valorHora = parseFloat(valorHora);
-    }
-
-    // Actualizamos los campos recibidos
-    if (date !== undefined) timeLog.date = date;
-    if (horaInicio !== undefined) timeLog.horaInicio = horaInicio;
-    if (horaFin !== undefined) timeLog.horaFin = horaFin;
-    if (valorHora !== undefined) timeLog.valorHora = parseFloat(valorHora);
-    if (festivo !== undefined) timeLog.festivo = festivo;
-    if (minutosAlmuerzoSinPago !== undefined) timeLog.minutosAlmuerzoSinPago = parseInt(minutosAlmuerzoSinPago, 10);
-    if (empresa !== undefined) timeLog.empresa = empresa;
-    if (totalLoanDeducted !== undefined) timeLog.totalLoanDeducted = parseFloat(totalLoanDeducted);
-
-    // ✅ Usamos los valores exactos enviados desde el frontend para actualizar
-    if (horasBrutas !== undefined) timeLog.horasBrutas = horasBrutas;
-    if (subtotal !== undefined) timeLog.subtotal = subtotal;
-    if (valorNeto !== undefined) timeLog.valorNeto = valorNeto;
-    if (valorFinalConDeducciones !== undefined) timeLog.valorNetoFinal = valorFinalConDeducciones;
-
-    // ❌ Eliminamos la lógica de recalcular aquí
-    // const dateStringForCalculation = timeLog.date instanceof Date ...
-    // ... y toda la lógica de cálculo
-    // Esto es lo que causaba el problema de redondeo al editar
-
-    const updatedTimeLog = await timeLog.save();
-    res.json(updatedTimeLog);
+    const updatedTimeLog = await timeLog.save();
+    res.json(updatedTimeLog);
 });
 
 // Bloque 5: Resetear registros de horario (para clientes)

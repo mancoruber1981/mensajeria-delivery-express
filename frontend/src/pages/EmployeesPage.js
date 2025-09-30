@@ -13,16 +13,26 @@ const EmployeesPage = () => {
     const navigate = useNavigate();
 
     useEffect(() => {
-        const fetchEmployees = async () => {
-            try {
-                const res = await API.get('/api/employees');
-                setEmployees(res.data);
-            } catch (err) {
-                toast.error('Error al cargar la lista de empleados.');
-            }
-        };
-        fetchEmployees();
-    }, []);
+    const fetchEmployees = async () => {
+        // Mensaje 1: Para saber que la función se está ejecutando
+        console.log('%c1. Buscando empleados...', 'color: blue; font-size: 16px;');
+
+        try {
+            const res = await API.get('/api/employees');
+
+            // Mensaje 2: Los datos específicos que nos interesan
+            console.log('%c2. Datos de los empleados recibidos:', 'color: green; font-size: 16px;', res.data);
+
+            setEmployees(res.data);
+        } catch (err) {
+            // Mensaje 3: Si hay un error, lo veremos en rojo
+            console.error('%c¡ERROR! La llamada a la API falló:', 'color: red; font-size: 16px;', err);
+            toast.error('Error al cargar la lista de empleados.');
+        }
+    };
+
+    fetchEmployees();
+}, []);
 
     const handleViewDocuments = (employee) => {
         setEmployeeToView(employee);
@@ -60,8 +70,13 @@ const EmployeesPage = () => {
                                     <td>{employee.phone}</td>
                                     <td>
                                         <strong>
-                                            ${(employee.currentBalance || 0).toLocaleString('es-CO')}
-                                        </strong>
+                    {/* Este es el cambio: Usamos 'currentBalance' que ya viene calculado */}
+                    {(employee.currentBalance || 0).toLocaleString('es-CO', {
+                        style: 'currency',
+                        currency: 'COP',
+                        minimumFractionDigits: 0
+                    })}
+                </strong>
                                     </td>
                                     <td>
                                         <button

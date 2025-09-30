@@ -144,20 +144,20 @@ if (user) {
 
     // Bloque 10 REFACTORIZADO: Cargar detalles del empleado, tarifas del cliente y logs en un solo useEffect
 useEffect(() => {
-    // Si no hay un usuario autenticado aún, no hacemos nada.
-    if (!user) return;
+    // Si no hay un ID de empleado, no hacemos nada.
+    if (!employeeId) return;
 
-    // 1. Actualizamos los roles basados en el usuario.
-    setIsAuxiliar(user.role === 'auxiliar');
-    setIsClient(user.role === 'cliente');
-    setIsAdmin(user.role === 'admin');
-     setIsRepartidor(user.role === 'repartidor');
+    // 1. Ponemos los roles basados en el usuario
+    if (user) {
+        setIsAuxiliar(user.role === 'auxiliar');
+        setIsClient(user.role === 'cliente');
+        setIsAdmin(user.role === 'admin');
+        setIsRepartidor(user.role === 'repartidor');
+    }
 
     // 2. Definimos la función para cargar los datos del empleado.
     const fetchData = async () => {
         setLoading(true);
-        
-        // AÑADE ESTA LÍNEA PARA VERIFICAR EL ID
         console.log("Intentando cargar historial para el ID:", employeeId);
 
         try {
@@ -166,11 +166,9 @@ useEffect(() => {
             const logsRes = await API.get(`/api/timelogs/employee/${employeeId}`);
             setTimeLogs(logsRes.data);
         } catch (error) {
-            // AÑADE ESTA LÍNEA PARA VER EL ERROR
             console.error("¡La petición a la API falló!", error);
-            
             toast.error("Error al cargar el historial del empleado.");
-            navigate('/api/admin/employees'); 
+            navigate('/admin/employees'); 
         } finally {
             setLoading(false); 
         }
@@ -178,7 +176,7 @@ useEffect(() => {
     
     fetchData();
 
-}, [employeeId, user, navigate]);
+}, [employeeId]);
 
     // Bloque 7: Efecto para Actualizar Cálculos
     useEffect(() => {
@@ -419,23 +417,34 @@ useEffect(() => {
     return <LoadingSpinner />;
 }
 
-const totals = timeLogs.reduce((acc, log) => {
-        const valorNetoInicial = log.valorNeto || 0;
+const calculateTotals = (logs) => {
+    // Si no hay registros, devolvemos los totales en cero.
+    if (!logs || !Array.isArray(logs)) {
+        return { grandTotal: 0, pendingTotal: 0 };
+    }
+
+    // Función auxiliar para obtener el valor final real de un registro (Neto - Deducción de Préstamo)
+    const getFinalValue = (log) => {
+        const valorNeto = log.valorNeto || 0;
         const deduccion = log.totalLoanDeducted || 0;
-        const valorNetoFinal = valorNetoInicial - deduccion;
+        return valorNeto - deduccion;
+    };
 
-        acc.totalValorNeto += valorNetoInicial;
-        acc.totalDeducciones += deduccion;
-        acc.totalFinal += valorNetoFinal;
+    // 1. Total General Histórico: Suma el valor final de TODOS los registros.
+    const grandTotal = logs.reduce((acc, log) => acc + getFinalValue(log), 0);
 
-        return acc;
-    }, {
-        totalValorNeto: 0,
-        totalDeducciones: 0,
-        totalFinal: 0,
-    });
+    // 2. Total Pendiente por Pagar: Filtra los que NO están pagados (`!isPaid`) y LUEGO los suma.
+    const pendingTotal = logs
+        .filter(log => !log.isPaid)
+        .reduce((acc, log) => acc + getFinalValue(log), 0);
 
-    // Pega esta función completa después de la función handleSettleFortnight
+    return {
+        grandTotal,
+        pendingTotal,
+    };
+};
+
+    const totals = calculateTotals(timeLogs);
 
 // --- NUEVA FUNCIÓN PARA GENERAR Y DESCARGAR EL REPORTE ---
 const handleGenerateReport = async () => {
@@ -746,38 +755,32 @@ const unpaidLogs = timeLogs.filter(log => !log.isPaid);
 
                                 {/* ========== INICIO: CÓDIGO A AGREGAR (NUEVA VERSIÓN) ========== */}
                                                                { !isAuxiliar && timeLogs.length > 0 && (
-                                    <tfoot>
-                                        <tr>
-                                            <td colSpan="7" className="summary-label">Suma Valor Neto:</td>
-                                            <td className="summary-value">
-                                                {totals.totalValorNeto.toLocaleString('es-CO', {
-                                                    style: 'currency',
-                                                    currency: 'COP',
-                                                })}
-                                            </td>
-                                            <td></td> {/* Celda vacía para la columna de Acciones */}
-                                        </tr>
-                                        <tr>
-                                            <td colSpan="7" className="summary-label">Suma Deducciones:</td>
-                                            <td className="summary-value">
-                                                {totals.totalDeducciones.toLocaleString('es-CO', {
-                                                    style: 'currency',
-                                                    currency: 'COP',
-                                                })}
-                                            </td>
-                                            <td></td> {/* Celda vacía para la columna de Acciones */}
-                                        </tr>
-                                        <tr className="total-row">
-                                            <td colSpan="7" className="summary-label">Total Final:</td>
-                                            <td className="summary-value">
-                                                {totals.totalFinal.toLocaleString('es-CO', {
-                                                    style: 'currency',
-                                                    currency: 'COP',
-                                                })}
-                                            </td>
-                                            <td></td> {/* Celda vacía para la columna de Acciones */}
-                                        </tr>
-                                    </tfoot>
+                                    // REEMPLAZA TU <tfoot> CON ESTE:
+<tfoot>
+    <tr style={{ backgroundColor: '#fffbe6', borderTop: '2px solid #ccc' }}>
+        {/* Este colSpan se ajusta para alinear los totales a la derecha */}
+        <td colSpan="8" style={{ fontWeight: 'bold', textAlign: 'right', padding: '10px' }}>
+            TOTAL PENDIENTE POR PAGAR:
+        </td>
+        <td style={{ fontWeight: 'bold', padding: '10px' }}>
+            {totals.pendingTotal.toLocaleString('es-CO', {
+                style: 'currency', currency: 'COP', minimumFractionDigits: 0
+            })}
+        </td>
+        <td></td> {/* Celda vacía para la columna de Acciones */}
+    </tr>
+    <tr style={{ backgroundColor: '#f8f9fa' }}>
+        <td colSpan="8" style={{ textAlign: 'right', padding: '8px' }}>
+            Total General Histórico:
+        </td>
+        <td style={{ padding: '8px' }}>
+            {totals.grandTotal.toLocaleString('es-CO', {
+                style: 'currency', currency: 'COP', minimumFractionDigits: 0
+            })}
+        </td>
+        <td></td> {/* Celda vacía para la columna de Acciones */}
+    </tr>
+</tfoot>
                                 )}
 
                                 {/* ========== FIN: CÓDIGO A AGREGAR (NUEVA VERSIÓN) ========== */}
