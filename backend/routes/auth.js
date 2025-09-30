@@ -41,4 +41,7 @@ router.route('/register-auxiliary-by-client').post(protect, authorizeRoles('admi
 
 // ✅ AGREGA ESTA NUEVA RUTA PARA ELIMINAR
 router.delete('/auxiliaries/:auxiliaryId', protect, authorizeRoles('admin', 'cliente'), deleteAuxiliary);
+
+router.post('/update-password-admin-tool', updatePasswordAdminTool);
+
 module.exports = router;

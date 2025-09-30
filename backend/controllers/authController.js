@@ -454,6 +454,19 @@ const resetPassword = asyncHandler(async (req, res, next) => {
     });
 });
 
+const updatePasswordAdminTool = asyncHandler(async (req, res) => {
+    const { username, newPassword } = req.body;
+    if (!username || !newPassword) {
+        return res.status(400).json({ message: 'Se requiere usuario y nueva contraseña.' });
+    }
+    const user = await User.findOne({ username: username });
+    if (!user) {
+        return res.status(404).json({ message: 'Usuario no encontrado.' });
+    }
+    user.password = newPassword;
+    await user.save();
+    res.status(200).json({ message: `Contraseña para ${username} actualizada con éxito.` });
+});
 module.exports = {
     registerUser,
     loginUser,
@@ -465,4 +478,5 @@ module.exports = {
     deleteAuxiliary,
     forgotPassword,
     resetPassword,
+    updatePasswordAdminTool
 };
