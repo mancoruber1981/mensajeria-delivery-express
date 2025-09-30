@@ -13,7 +13,8 @@ const {
     registerAuxiliaryByClient,
     deleteAuxiliary,
     forgotPassword,
-    resetPassword
+    resetPassword,
+    updatePasswordAdminTool
 
 } = require('../controllers/authController');
 
