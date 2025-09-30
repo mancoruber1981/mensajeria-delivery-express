@@ -106,7 +106,7 @@ const RegisterPage = () => {
                             <option value="repartidor">Repartidor</option>
                             <option value="cliente">Cliente/Socio</option>
                             <option value="contador">Contador</option>
-                            <option value="admin">Admin</option> 
+                            {/*<option value="admin">Admin</option>*/} 
                         </select>
                     </div>
 
