@@ -39,7 +39,8 @@ const Navbar = () => {
                                 <li><Link to="/admin/clients">Clientes</Link></li>
                                 <li><Link to="/admin/approve-users">Aprobar</Link></li>
                                 <li><Link to="/loans">Préstamos</Link></li>
-                                 <li><Link to="/admin/expenses">Gastos</Link></li>
+                                <li><Link to="/admin/expenses">Gastos</Link></li>
+                                <li><Link to="/admin/extra-incomes">Ingresos Extras</Link></li>
                             </>
                         )}
                         {user.role === 'repartidor' && (
@@ -55,7 +56,7 @@ const Navbar = () => {
                 ) : (
                     <>
                         <li><Link to="/login">Iniciar Sesión</Link></li>
-                          <li><Link to="/register">Registrarse</Link></li>
+                           {/*<li><Link to="/register">Registrarse</Link></li>*/}
                     </>
                 )}
             </ul>
@@ -77,6 +78,7 @@ const Navbar = () => {
                                 <li><Link to="/admin/approve-users" onClick={handleLinkClick}>Aprobar</Link></li>
                                 <li><Link to="/loans" onClick={handleLinkClick}>Préstamos</Link></li>
                                 <li><Link to="/admin/expenses" onClick={handleLinkClick}>Gastos</Link></li>
+                                <li><Link to="/admin/extra-incomes" onClick={handleLinkClick}>Ingresos Extras</Link></li>
                             </>
                         )}
                          {user.role === 'repartidor' && (

@@ -9,6 +9,7 @@ const User = require('../models/User');
 const Settlement = require('../models/Settlement');
 const Loan = require('../models/Loan');
 const Expense = require('../models/Expense'); 
+const ExtraIncome = require('../models/ExtraIncome');
 
 
 const getDashboardStats = asyncHandler(async (req, res) => {
@@ -273,15 +274,22 @@ const getAccountantLedger = asyncHandler(async (req, res) => {
 
     const otherExpensesPromise = Expense.find({ date: { $gte: start, $lte: end } }).lean();
 
-    const [incomeEntries, expenseEntries, loanEntries, otherExpenses] = await Promise.all([
+      const extraIncomesPromise = ExtraIncome.find({ date: { $gte: start, $lte: end } }).lean();
+
+     const [incomeEntries, expenseEntries, loanEntries, otherExpenses, extraIncomes] = await Promise.all([
         incomePromise, 
         expensePromise,
         loansPromise,
-        otherExpensesPromise
+        otherExpensesPromise,
+        extraIncomesPromise 
     ]);
 
     // --- PASO 2: UNIFICAR TODOS LOS MOVIMIENTOS ---
     let allTransactions = [...incomeEntries, ...expenseEntries]; // <-- La variable se llama allTransactions
+
+     extraIncomes.forEach(inc => {
+        allTransactions.push({ date: inc.date, description: `Ingreso Extra: ${inc.description}`, amount: inc.amount, type: 'income' });
+    });
 
     loanEntries.forEach(loan => {
         allTransactions.push({ // <-- Usamos allTransactions
@@ -301,6 +309,15 @@ const getAccountantLedger = asyncHandler(async (req, res) => {
         });
     });
     
+    extraIncomes.forEach(inc => {
+        allTransactions.push({
+            date: inc.date,
+            description: `Ingreso Extra: ${inc.description}`,
+            amount: inc.amount,
+            type: 'income'
+        });
+    });
+
     // --- PASO 3: CALCULAR TOTALES Y ENVIAR RESPUESTA ---
     allTransactions = allTransactions.filter(t => t.amount > 0);
     const totalIncome = allTransactions.filter(t => t.type === 'income').reduce((sum, t) => sum + t.amount, 0);
@@ -753,26 +770,49 @@ const getOwnSettlementReport = asyncHandler(async (req, res) => {
 
 
 const generateMasterReport = asyncHandler(async (req, res) => {
-    // ... (Esta es la función que arreglamos para el Excel, la incluimos completa)
-    const { startDate, endDate } = req.query;
-    if (!startDate || !endDate) { throw new Error('Las fechas de inicio y fin son requeridas.'); }
-    const start = new Date(startDate);
-    start.setUTCHours(0, 0, 0, 0);
-    const end = new Date(endDate);
-    end.setUTCHours(23, 59, 59, 999);
-    const timeLogs = await TimeLog.find({ date: { $gte: start, $lte: end } }).populate({ path: 'employee', select: 'fullName employeeType idCard phone address' }).lean();
-    const loans = await Loan.find({ dateGranted: { $gte: start, $lte: end }, status: 'Aprobado' }).populate('employee', 'fullName idCard phone address').lean();
-    const otherExpenses = await Expense.find({ date: { $gte: start, $lte: end } }).lean();
+    const { startDate, endDate } = req.query;
+    if (!startDate || !endDate) {
+        throw new Error('Las fechas de inicio y fin son requeridas.');
+    }
+
+    const start = new Date(startDate);
+    start.setUTCHours(0, 0, 0, 0); 
+    const end = new Date(endDate);
+    end.setUTCHours(23, 59, 59, 999);
+
+    // --- 1. PREPARAMOS TODAS LAS BÚSQUEDAS ---
+    const timeLogsPromise = TimeLog.find({ date: { $gte: start, $lte: end } })
+        .populate({ path: 'employee', select: 'fullName employeeType idCard phone address' })
+        .lean();
+    
+    const loansPromise = Loan.find({ dateGranted: { $gte: start, $lte: end }, status: 'Aprobado' })
+        .populate('employee', 'fullName idCard phone address')
+        .lean();
+
+    const otherExpensesPromise = Expense.find({ date: { $gte: start, $lte: end } }).lean();
+    const extraIncomesPromise = ExtraIncome.find({ date: { $gte: start, $lte: end } }).lean();
+
+    // --- 2. EJECUTAMOS TODAS LAS BÚSQUEDAS A LA VEZ ---
+    const [timeLogs, loans, otherExpenses, extraIncomes] = await Promise.all([
+        timeLogsPromise,
+        loansPromise,
+        otherExpensesPromise,
+        extraIncomesPromise
+    ]);
+
+    // --- 3. PROCESAMOS Y UNIFICAMOS LOS DATOS ---
     const clientNames = [...new Set(timeLogs.filter(log => log.employee?.employeeType === 'cliente').map(log => log.empresa))];
-    const clients = await Client.find({ companyName: { $in: clientNames } }).lean();
-    const clientDetailsMap = clients.reduce((map, client) => { map[(client.companyName || '').trim()] = client; return map; }, {});
-    const transactions = [];
+    const clients = await Client.find({ companyName: { $in: clientNames } }).lean();
+    const clientDetailsMap = clients.reduce((map, client) => { map[(client.companyName || '').trim()] = client; return map; }, {});
+    const transactions = [];
     const incomeByClient = timeLogs.filter(l => l.employee?.employeeType === 'cliente' && l.valorNetoFinal > 0).reduce((acc, log) => { const name = (log.empresa || 'CG').trim(); if (!acc[name]) { acc[name] = { amount: 0, details: clientDetailsMap[name] }; } acc[name].amount += log.valorNetoFinal; return acc; }, {});
     for (const name in incomeByClient) { const data = incomeByClient[name]; transactions.push({ date: end, description: `Ingresos por servicios a: ${name}`, type: 'income', amount: data.amount, contact: data.details }); }
     const expensesByEmployee = timeLogs.filter(l => l.employee?.employeeType !== 'cliente' && l.valorNetoFinal > 0).reduce((acc, log) => { const empId = log.employee._id.toString(); if (!acc[empId]) { acc[empId] = { amount: 0, employee: log.employee }; } acc[empId].amount += log.valorNetoFinal; return acc; }, {});
     for (const empId in expensesByEmployee) { const data = expensesByEmployee[empId]; transactions.push({ date: end, description: `Pago por servicios a: ${data.employee.fullName}`, type: 'expense', amount: data.amount, contact: data.employee }); }
     loans.forEach(loan => { transactions.push({ date: loan.dateGranted, description: `Préstamo otorgado a: ${loan.employee.fullName}`, amount: loan.amount, type: 'expense', contact: loan.employee }); });
     otherExpenses.forEach(expense => { transactions.push({ date: expense.date, description: expense.description, amount: expense.amount, type: 'expense', contact: { idCard: expense.payeeId, phone: expense.payeePhone, address: expense.payeeAddress } }); });
+    extraIncomes.forEach(inc => { transactions.push({ date: inc.date, description: `Ingreso Extra: ${inc.description}`, type: 'income', amount: inc.amount, contact: { idCard: inc.contributorId, phone: inc.contributorPhone, address: inc.contributorAddress } }); });
+
     const workbook = new ExcelJS.Workbook();
     const ledgerSheet = workbook.addWorksheet('Libro Contable');
     ledgerSheet.columns = [
@@ -791,6 +831,8 @@ const generateMasterReport = asyncHandler(async (req, res) => {
             income: t.type === 'income' ? t.amount : null, expense: t.type === 'expense' ? t.amount : null,
         });
     });
+
+    
     const lastDataRow = ledgerSheet.lastRow.number;
     const totalsRow = ledgerSheet.addRow([]);
     ledgerSheet.getCell(`E${totalsRow.number}`).value = 'TOTALES:';
@@ -801,10 +843,10 @@ const generateMasterReport = asyncHandler(async (req, res) => {
     ledgerSheet.getCell(`E${balanceRow.number}`).value = 'SALDO FINAL:';
     ledgerSheet.getCell(`F${balanceRow.number}`).value = { formula: `F${totalsRow.number}-G${totalsRow.number}` };
     balanceRow.font = { bold: true };
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', `attachment; filename="Reporte_Maestro_Contable_${startDate}_a_${endDate}.xlsx"`);
-    await workbook.xlsx.write(res);
-    res.end();
+       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="Reporte_Maestro_Contable_${startDate}_a_${endDate}.xlsx"`);
+    await workbook.xlsx.write(res);
+    res.end();
 });
 
 module.exports = {

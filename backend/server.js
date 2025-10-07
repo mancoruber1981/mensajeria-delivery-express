@@ -13,9 +13,10 @@ const uploadRoutes = require('./routes/upload');
 const exportRoutes = require('./routes/export');
 const clientRoutes = require('./routes/clients');
 const adminRoutes = require('./routes/adminRoutes');
-const loanRoutes = require('./routes/loanRoutes'); // <-- Importado una sola vez
+const loanRoutes = require('./routes/loanRoutes'); 
 console.log('--- ✅ 2. Objeto importado como loanRoutes:', typeof loanRoutes);
 const expenseRoutes = require('./routes/expenseRoutes');
+const extraIncomeRoutes = require('./routes/extraIncomeRoutes');
 
 const app = express();
 
@@ -55,6 +56,7 @@ app.use('/api/clients', clientRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/loans', loanRoutes); 
 app.use('/api/expenses', expenseRoutes);
+app.use('/api/extra-incomes', extraIncomeRoutes);
 
 
 // ==================== 5. MIDDLEWARE DE MANEJO DE ERRORES ====================

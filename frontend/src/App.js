@@ -34,6 +34,7 @@ import LoansPage from './pages/LoansPage';
 import ExpensesPage from './pages/ExpensesPage';
 import ForgotPasswordPage from './pages/ForgotPasswordPage';
 import ResetPasswordPage from './pages/ResetPasswordPage';
+import ExtraIncomePage from './pages/ExtraIncomePage';
 
 function App() {
     return (
@@ -52,12 +53,13 @@ function App() {
 
                         {/* === RUTAS PROTEGIDAS === */}
                         {/* Administrador */}
-                        <Route element={<ProtectedRoute requiredRole="admin" />}>
+                        <Route element={<ProtectedRoute requiredRole={['admin', 'contador']} />}>
                             <Route path="/dashboard-admin" element={<AdminDashboardPage />} />
                             <Route path="/admin/employees" element={<EmployeesPage />} />
                             <Route path="/admin/clients" element={<ClientsPage />} />
                             <Route path="/admin/approve-users" element={<UserApprovalPage />} />
                             <Route path="/admin/expenses" element={<ExpensesPage />} />
+                            <Route path="/admin/extra-incomes" element={<ExtraIncomePage />} />
                             <Route path="/accountant-report" element={<ContadorPage />} />
                             <Route path="/admin/view-client-dashboard/:clientId" element={<DashboardPage />} />
                             <Route path="/admin/view-courier-dashboard/:employeeId" element={<AdminViewCourierSummaryPage />} />
