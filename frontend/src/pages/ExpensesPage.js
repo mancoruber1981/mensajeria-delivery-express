@@ -13,6 +13,10 @@ const ExpensesPage = () => {
     const [description, setDescription] = useState('');
     const [amount, setAmount] = useState('');
     const [category, setCategory] = useState('Operativo');
+    const [payeeId, setPayeeId] = useState('');
+    const [payeePhone, setPayeePhone] = useState('');
+    const [payeeAddress, setPayeeAddress] = useState('');
+    const [payeeName, setPayeeName] = useState('');
     const [reference, setReference] = useState('');
 
     const fetchExpenses = useCallback(async () => {
@@ -38,6 +42,10 @@ const ExpensesPage = () => {
                 description,
                 amount: parseFloat(amount),
                 category,
+                payeeName,
+                payeePhone,
+                payeeAddress,
+                payeeId,
                 reference
             });
             toast.success('Gasto registrado con éxito.');
@@ -80,6 +88,22 @@ const ExpensesPage = () => {
                         <label>Monto ($):</label>
                         <input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="Ej: 500000" required />
                     </div>
+                    <div className="form-group">
+                        <label>Nombre del Beneficiario (Opcional):</label>
+                        <input type="text" value={payeeName} onChange={(e) => setPayeeName(e.target.value)} placeholder="Ej: Pepito Pérez (Contador)" />
+                    </div>
+                    <div className="form-group">
+                        <label>Cédula o NIT del Beneficiario (Opcional):</label>
+                        <input type="text" value={payeeId} onChange={(e) => setPayeeId(e.target.value)} placeholder="Ej: 123456789" />
+                    </div>
+                    <div className="form-group">
+                        <label>Teléfono del Beneficiario (Opcional):</label>
+                        <input type="text" value={payeePhone} onChange={(e) => setPayeePhone(e.target.value)} placeholder="Ej: 3001234567" />
+                    </div>
+                    <div className="form-group">
+                        <label>Dirección del Beneficiario (Opcional):</label>
+                        <input type="text" value={payeeAddress} onChange={(e) => setPayeeAddress(e.target.value)} placeholder="Ej: Calle 10 # 20-30" />
+                    </div>
                     <div className="form-group">
                         <label>Categoría:</label>
                         <select value={category} onChange={(e) => setCategory(e.target.value)}>

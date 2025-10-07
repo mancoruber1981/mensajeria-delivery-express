@@ -227,7 +227,11 @@ const exportTimeLogsToExcelForEmployee = asyncHandler(async (req, res) => {
         return res.status(403).json({ message: 'Acceso denegado' });
     }
 
-    const allTimeLogs = await TimeLog.find({ employee: employeeId }).sort({ date: 1 }).lean();
+    // Asegurarse de que el populate traiga el nombre de la empresa/cliente
+    const allTimeLogs = await TimeLog.find({ employee: employeeId })
+        .populate('empresa', 'name') // 'empresa' es el campo en TimeLog que referencia al Cliente
+        .sort({ date: 1 })
+        .lean();
 
     if (!allTimeLogs || allTimeLogs.length === 0) {
         return res.status(404).json({ message: 'No tienes ningún registro en tu historial para exportar.' });
@@ -236,42 +240,96 @@ const exportTimeLogsToExcelForEmployee = asyncHandler(async (req, res) => {
     const workbook = new ExcelJS.Workbook();
     workbook.creator = 'Delivery Express SAS';
     const detailsSheet = workbook.addWorksheet('Historial Completo de Registros');
-    
+
+    // --- Definir columnas (headers) ACTUALIZADAS ---
     detailsSheet.columns = [
         { header: 'Fecha', key: 'date', width: 15, style: { numFmt: 'dd/mm/yyyy' } },
         { header: 'Empresa', key: 'empresa', width: 25 },
+        { header: 'Hora Inicio', key: 'horaInicio', width: 15 },    // NUEVA COLUMNA
+        { header: 'Hora Fin', key: 'horaFin', width: 15 },          // NUEVA COLUMNA
+        { header: 'Total Horas', key: 'totalHoras', width: 15 },    // NUEVA COLUMNA Y SUMATORIO AL FINAL
+        { header: 'Valor por Hora', key: 'valorHora', width: 18, style: { numFmt: '$ #,##0.00' } }, // Añadido
         { header: 'Subtotal', key: 'subtotal', width: 18, style: { numFmt: '$ #,##0.00' } },
         { header: 'Desc. Almuerzo', key: 'descuentoAlmuerzo', width: 18, style: { numFmt: '$ #,##0.00' } },
         { header: 'Valor Neto Inicial', key: 'valorNetoInicial', width: 18, style: { numFmt: '$ #,##0.00' } },
         { header: 'Deducción Préstamo', key: 'totalLoanDeducted', width: 18, style: { numFmt: '$ #,##0.00' } },
         { header: 'Valor Neto Final', key: 'valorNetoFinal', width: 18, style: { numFmt: '$ #,##0.00' } },
         { header: 'Estado', key: 'estado', width: 15 },
+        { header: 'Fecha de Pago', key: 'paidDate', width: 15, style: { numFmt: 'dd/mm/yyyy' } }, // Añadido
+        { header: 'Notas', key: 'notes', width: 30 } // Añadido
     ];
-    
-    const detailsData = allTimeLogs.map(log => ({
-        date: new Date(log.date),
-        empresa: log.empresa,
-        subtotal: log.subtotal,
-        descuentoAlmuerzo: log.descuentoAlmuerzo,
-        valorNetoInicial: log.valorNeto,
-        totalLoanDeducted: log.totalLoanDeducted,
-        valorNetoFinal: log.valorNetoFinal,
-        estado: log.isPaid ? 'Pagado' : 'Pendiente'
-    }));
+
+    let totalMinutesForAllLogs = 0; // Para la autosuma de horas
+
+    const detailsData = allTimeLogs.map(log => {
+        const horaInicio = log.horaInicio || 'N/A';
+        const horaFin = log.horaFin || 'N/A';
+        let totalHorasFormato = 'N/A';
+        let logDurationMinutes = 0; // Duración de este log en minutos
+
+        if (log.horaInicio && log.horaFin) {
+            const [startH, startM] = log.horaInicio.split(':').map(Number);
+            const [endH, endM] = log.horaFin.split(':').map(Number);
+
+            let diffMinutes = (endH * 60 + endM) - (startH * 60 + startM);
+            if (diffMinutes < 0) diffMinutes += 24 * 60; // Manejo de turnos nocturnos
+
+            logDurationMinutes = diffMinutes;
+            const hours = Math.floor(diffMinutes / 60);
+            const minutes = diffMinutes % 60;
+            totalHorasFormato = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+        }
+        totalMinutesForAllLogs += logDurationMinutes; // Suma al total global
+
+        return {
+            date: new Date(log.date),
+            empresa: log.empresa ? log.empresa.name : 'N/A', // Asegúrate de que 'empresa' esté populado para obtener el nombre
+            horaInicio: horaInicio,
+            horaFin: horaFin,
+            totalHoras: totalHorasFormato, // Aquí va el HH:MM de este log
+            valorHora: log.valorHora || 0, // Asegúrate que este campo existe en tu modelo
+            subtotal: log.subtotal || 0,
+            descuentoAlmuerzo: log.descuentoAlmuerzo || 0,
+            valorNetoInicial: log.valorNeto || 0,
+            totalLoanDeducted: log.totalLoanDeducted || 0,
+            valorNetoFinal: log.valorNetoFinal || 0,
+            estado: log.isPaid ? 'Pagado' : 'Pendiente',
+            paidDate: log.paidDate ? new Date(log.paidDate) : '',
+            notes: log.notes || '' // Asegúrate que este campo existe en tu modelo
+        };
+    });
     detailsSheet.addRows(detailsData);
-    
+
+    // --- Fila de SUMA TOTAL DE HORAS (Autosuma) y SUMA TOTAL MONETARIA ---
     const dataRowCount = detailsData.length;
     if (dataRowCount > 0) {
-        const totalRow = detailsSheet.addRow([]);
-        const totalsLabelCell = totalRow.getCell('F');
-        totalsLabelCell.value = 'TOTAL HISTÓRICO:';
-        totalsLabelCell.font = { bold: true };
-        totalsLabelCell.alignment = { horizontal: 'right' };
-        
-        const totalsValueCell = totalRow.getCell('G');
-        totalsValueCell.value = { formula: `SUM(G2:G${1 + dataRowCount})` }; 
-        totalsValueCell.font = { bold: true };
-        totalsValueCell.numFmt = '$ #,##0.00';
+        const totalRow = detailsSheet.addRow([]); // Fila vacía para espacio
+
+        // Suma TOTAL DE HORAS
+        const totalHours = Math.floor(totalMinutesForAllLogs / 60);
+        const remainingMinutes = totalMinutesForAllLogs % 60;
+        const totalHoursFormatted = `${String(totalHours).padStart(2, '0')}:${String(remainingMinutes).padStart(2, '0')}`;
+
+        const totalHoursLabelCell = totalRow.getCell('D'); // Columna 'D' para "Hora Fin" (visual, ajusta si es necesario)
+        totalHoursLabelCell.value = 'TOTAL HORAS TRABAJADAS:';
+        totalHoursLabelCell.font = { bold: true };
+        totalHoursLabelCell.alignment = { horizontal: 'right' };
+
+        const totalHoursValueCell = totalRow.getCell('E'); // Columna 'E' para "Total Horas"
+        totalHoursValueCell.value = totalHoursFormatted;
+        totalHoursValueCell.font = { bold: true };
+        totalHoursValueCell.alignment = { horizontal: 'left' }; // O 'right' según prefieras
+
+        // SUMA TOTAL MONETARIA (Valor Neto Final) - Columna K
+        const totalsMonetaryLabelCell = totalRow.getCell('J'); // Columna 'J' para "Deducción Préstamo" (visual, ajusta si es necesario)
+        totalsMonetaryLabelCell.value = 'TOTAL VALOR NETO FINAL:';
+        totalsMonetaryLabelCell.font = { bold: true };
+        totalsMonetaryLabelCell.alignment = { horizontal: 'right' };
+
+        const totalsMonetaryValueCell = totalRow.getCell('K'); // Columna 'K' para "Valor Neto Final"
+        totalsMonetaryValueCell.value = { formula: `SUM(K2:K${1 + dataRowCount})` }; // Suma de la columna K
+        totalsMonetaryValueCell.font = { bold: true };
+        totalsMonetaryValueCell.numFmt = '$ #,##0.00';
     }
 
     const employee = await Employee.findById(employeeId).lean();
@@ -280,7 +338,7 @@ const exportTimeLogsToExcelForEmployee = asyncHandler(async (req, res) => {
 
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', `attachment; filename=${fileName}`);
-    
+
     await workbook.xlsx.write(res);
     res.end();
 });

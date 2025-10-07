@@ -8,44 +8,37 @@ const TimeLog = require('../models/TimeLog');
 const User = require('../models/User');
 const Settlement = require('../models/Settlement');
 const Loan = require('../models/Loan');
+const Expense = require('../models/Expense'); 
 
-// --- Función para obtener las estadísticas del Dashboard del Administrador (CORREGIDA) ---
+
 const getDashboardStats = asyncHandler(async (req, res) => {
-    try {
-        const totalEmployees = await Employee.countDocuments();
-        const totalClients = await Client.countDocuments();
-        const totalUsers = await User.countDocuments();
-
-        // --- CÁLCULO PARA "TOTAL A COBRAR A CLIENTES" ---
-        // Suma todos los registros NO LIQUIDADOS de empleados tipo 'cliente'
-        const totalACobrarPromise = TimeLog.aggregate([
-            { $lookup: { from: 'employees', localField: 'employee', foreignField: '_id', as: 'employeeInfo' } },
-            { $unwind: '$employeeInfo' },
-            { $match: { 'employeeInfo.employeeType': 'cliente', isPaid: false } },
+    try {
+        const totalEmployees = await Employee.countDocuments();
+        const totalClients = await Client.countDocuments();
+        const totalUsers = await User.countDocuments();
+        const clients = await Client.find({}).select('employees');
+        const employeeIdsOfClients = clients.flatMap(client => client.employees);
+        const cobrarRes = await TimeLog.aggregate([
+            { $match: { isPaid: false, employee: { $in: employeeIdsOfClients } } },
             { $group: { _id: null, total: { $sum: '$valorNetoFinal' } } }
         ]);
 
-        // --- CÁLCULO PARA "TOTAL A PAGAR A REPARTIDORES" ---
-        // Suma todos los registros NO PAGADOS de empleados tipo 'repartidor'
-        const totalAPagarPromise = TimeLog.aggregate([
-            { $lookup: { from: 'employees', localField: 'employee', foreignField: '_id', as: 'employeeInfo' } },
-            { $unwind: '$employeeInfo' },
-            // ✅ CORRECCIÓN CLAVE: Filtra para quedarse SOLO con los registros de REPARTIDORES y que NO estén pagados
-            { $match: { 'employeeInfo.role': 'repartidor', isPaid: false } },
-            { $group: { _id: null, total: { $sum: '$valorNetoFinal' } } }
-        ]);
+        const pagarRes = await TimeLog.aggregate([
+            { $match: { isPaid: false } },
+            { $lookup: { from: 'employees', localField: 'employee', foreignField: '_id', as: 'employeeInfo' } },
+            { $unwind: '$employeeInfo' },
+            { $match: { 'employeeInfo.employeeType': { $ne: 'cliente' } } },
+            { $group: { _id: null, total: { $sum: '$valorNetoFinal' } } }
+        ]);
 
-        const [cobrarRes, pagarRes] = await Promise.all([totalACobrarPromise, totalAPagarPromise]);
-        const totalACobrar = cobrarRes[0]?.total || 0;
-        const totalAPagar = pagarRes[0]?.total || 0;
-        const gananciaEstimada = totalACobrar - totalAPagar;
+        const totalACobrar = cobrarRes[0]?.total || 0;
+        const totalAPagar = pagarRes[0]?.total || 0;
+        const gananciaEstimada = totalACobrar - totalAPagar;
 
-        const stats = { totalEmployees, totalClients, totalUsers, totalACobrar, totalAPagar, gananciaEstimada };
-        res.status(200).json({ success: true, message: "Estadísticas del dashboard cargadas exitosamente", stats });
-    } catch (error) {
-        console.error('Error en getDashboardStats:', error);
-        res.status(500).json({ message: 'Error al obtener las estadísticas del dashboard', error: error.message });
-    }
+        res.json({ stats: { totalEmployees, totalClients, totalUsers, totalACobrar, totalAPagar, gananciaEstimada } });
+    } catch (error) {
+        res.status(500).json({ message: 'Error al obtener las estadísticas', error: error.message });
+    }
 });
 const settleFortnight = asyncHandler(async (req, res) => {
     // ✅ --- INICIO DE LA CORRECCIÓN DE FECHAS ---
@@ -242,88 +235,86 @@ const settleClientTotal = asyncHandler(async (req, res) => {
     });
 });
 
-// --- Función para tu Contador Unificado (RESUMEN CONSOLIDADO) ---
 const getAccountantLedger = asyncHandler(async (req, res) => {
-    const { startDate, endDate } = req.query;
-    if (!startDate || !endDate) {
-        res.status(400);
-        throw new Error('Por favor, proporciona una fecha de inicio y una fecha de fin para el libro contable.');
-    }
+    const { startDate, endDate } = req.query;
+    if (!startDate || !endDate) {
+        res.status(400);
+        throw new Error('Por favor, proporciona una fecha de inicio y una fecha de fin.');
+    }
+
     const start = new Date(startDate);
-    start.setUTCHours(0, 0, 0, 0);
-    const end = new Date(endDate);
+    start.setUTCHours(0, 0, 0, 0); 
+    const end = new Date(endDate);
     end.setUTCHours(23, 59, 59, 999);
 
-   const incomePromise = TimeLog.aggregate([
-    { $match: { date: { $gte: start, $lte: end }, valorNetoFinal: { $gt: 0 } } },
-    { $lookup: { from: 'employees', localField: 'employee', foreignField: '_id', as: 'employeeInfo' } },
-    { $unwind: '$employeeInfo' },
-    { $match: { 'employeeInfo.employeeType': 'cliente' } },
-    { $lookup: { from: 'clients', localField: 'employee', foreignField: 'employees', as: 'clientInfo' } }, // <-- ¡CAMBIO IMPORTANTE!
-    { $unwind: '$clientInfo' },
-    { $group: {
-        _id: '$clientInfo.companyName',
-        totalAmount: { $sum: '$valorNetoFinal' },
-        firstDate: { $first: '$date' },
-        cedula: { $first: '$clientInfo.nit' },
-        telefono: { $first: '$clientInfo.phone' },
-        direccion: { $first: '$clientInfo.address' },
-        email: { $first: '$clientInfo.email' }
-      }
-    },
-    { $project: {
-        _id: 0,
-        type: 'income',
-        date: '$firstDate',
-        description: { $concat: ["Servicio a ", "$_id"] },
-        amount: '$totalAmount',
-        cedula: '$cedula',
-        telefono: '$telefono',
-        direccion: '$direccion',
-        email: '$email'
-      }
-    }
-]);
+    // --- PASO 1: BUSCAR EN TODAS LAS FUENTES DE DATOS ---
+    const incomePromise = TimeLog.aggregate([
+        { $match: { date: { $gte: start, $lte: end } } },
+        { $lookup: { from: 'employees', localField: 'employee', foreignField: '_id', as: 'employeeInfo' } },
+        { $unwind: '$employeeInfo' },
+        { $match: { 'employeeInfo.employeeType': 'cliente' } },
+        { $group: { _id: '$empresa', totalAmount: { $sum: '$valorNetoFinal' } } },
+        { $project: { _id: 0, date: end, description: { $concat: ["Ingresos por servicios a: ", "$_id"] }, amount: '$totalAmount', type: 'income' } }
+    ]);
 
-    const expensePromise = TimeLog.aggregate([
-    { $match: { date: { $gte: start, $lte: end }, valorNetoFinal: { $gt: 0 } } },
-    { $lookup: { from: 'employees', localField: 'employee', foreignField: '_id', as: 'employeeInfo' } },
-    { $unwind: '$employeeInfo' },
-    { $match: { 'employeeInfo.role': 'repartidor' } }, // <-- ¡ESTE ES EL CAMBIO!
-    { $group: {
-        _id: '$employeeInfo._id',
-        totalAmount: { $sum: '$valorNetoFinal' },
-        firstDate: { $first: '$date' },
-        fullName: { $first: '$employeeInfo.fullName' },
-        cedula: { $first: '$employeeInfo.idCard' },
-        telefono: { $first: '$employeeInfo.phone' },
-        direccion: { $first: '$employeeInfo.address' },
-        email: { $first: '$employeeInfo.email' }
-      }
-    },
-    { $project: {
-        _id: 0,
-        type: 'expense',
-        date: '$firstDate',
-        description: { $concat: ["Pago a repartidor ", "$fullName"] },
-        amount: '$totalAmount',
-        cedula: '$cedula',
-        telefono: '$telefono',
-        direccion: '$direccion',
-        email: '$email'
-      }
-    }
-]);
+    const expensePromise = TimeLog.aggregate([
+        { $match: { date: { $gte: start, $lte: end } } },
+        { $lookup: { from: 'employees', localField: 'employee', foreignField: '_id', as: 'employeeInfo' } },
+        { $unwind: '$employeeInfo' },
+        { $match: { 'employeeInfo.employeeType': { $ne: 'cliente' } } },
+        { $group: { _id: '$employeeInfo.fullName', totalAmount: { $sum: '$valorNetoFinal' } } },
+        { $project: { _id: 0, date: end, description: { $concat: ["Pago por servicios a: ", "$_id"] }, amount: '$totalAmount', type: 'expense' } }
+    ]);
+    
+    const loansPromise = Loan.find({
+        dateGranted: { $gte: start, $lte: end },
+        status: 'Aprobado'
+    }).populate('employee', 'fullName').lean();
 
-    const [incomeEntries, expenseEntries] = await Promise.all([incomePromise, expensePromise]);
-    const totalIncome = incomeEntries.reduce((s, e) => s + (e.amount || 0), 0);
-    const totalExpense = expenseEntries.reduce((s, e) => s + (e.amount || 0), 0);
-    const finalBalance = totalIncome - totalExpense;
-    const allTransactions = [...incomeEntries, ...expenseEntries].sort((a, b) => new Date(a.date) - new Date(b.date));
+    const otherExpensesPromise = Expense.find({ date: { $gte: start, $lte: end } }).lean();
 
-    res.json({ totalIncome, totalExpense, finalBalance, transactions: allTransactions });
+    const [incomeEntries, expenseEntries, loanEntries, otherExpenses] = await Promise.all([
+        incomePromise, 
+        expensePromise,
+        loansPromise,
+        otherExpensesPromise
+    ]);
+
+    // --- PASO 2: UNIFICAR TODOS LOS MOVIMIENTOS ---
+    let allTransactions = [...incomeEntries, ...expenseEntries]; // <-- La variable se llama allTransactions
+
+    loanEntries.forEach(loan => {
+        allTransactions.push({ // <-- Usamos allTransactions
+            date: loan.dateGranted,
+            description: `Préstamo otorgado a: ${loan.employee.fullName}`,
+            amount: loan.amount,
+            type: 'expense'
+        });
+    });
+
+    otherExpenses.forEach(expense => {
+        allTransactions.push({ // <-- Usamos allTransactions
+            date: expense.date,
+            description: expense.description,
+            amount: expense.amount,
+            type: 'expense'
+        });
+    });
+    
+    // --- PASO 3: CALCULAR TOTALES Y ENVIAR RESPUESTA ---
+    allTransactions = allTransactions.filter(t => t.amount > 0);
+    const totalIncome = allTransactions.filter(t => t.type === 'income').reduce((sum, t) => sum + t.amount, 0);
+    const totalExpense = allTransactions.filter(t => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0);
+    const finalBalance = totalIncome - totalExpense;
+    allTransactions.sort((a, b) => new Date(a.date) - new Date(b.date));
+
+    res.json({ 
+        transactions: allTransactions, 
+        totalIncome, 
+        totalExpense, 
+        finalBalance 
+    });
 });
-
 // --- Función para registrar un nuevo empleado (cliente o repartidor) ---
 const registerEmployee = asyncHandler(async (req, res) => {
     try {
@@ -547,128 +538,151 @@ const deleteAuxiliaryByAdmin = asyncHandler(async (req, res) => {
 const ExcelJS = require('exceljs');
 
 const getEmployeeSettlementReport = asyncHandler(async (req, res) => {
-    const { employeeId } = req.params;
-    const { startDate, endDate, includeSS } = req.query; // <-- 1. RECIBIMOS LA NUEVA OPCIÓN
+    const { employeeId } = req.params;
+    const { startDate, endDate, includeSS } = req.query;
 
-    if (!startDate || !endDate) {
-        res.status(400);
-        throw new Error('Por favor, proporciona una fecha de inicio y de fin para el reporte.');
-    }
+    if (!startDate || !endDate) {
+        res.status(400);
+        throw new Error('Por favor, proporciona una fecha de inicio y de fin para el reporte.');
+    }
 
-    const start = new Date(startDate);
-    start.setUTCHours(0, 0, 0, 0);
-    const end = new Date(endDate);
-    end.setUTCHours(23, 59, 59, 999);
+    const start = new Date(startDate);
+    start.setUTCHours(0, 0, 0, 0);
+    const end = new Date(endDate);
+    end.setUTCHours(23, 59, 59, 999);
 
-    const employee = await Employee.findById(employeeId).lean();
-    if (!employee) {
-        res.status(404);
-        throw new Error('Mensajero no encontrado.');
-    }
+    const employee = await Employee.findById(employeeId).lean();
+    if (!employee) {
+        res.status(404);
+        throw new Error('Mensajero no encontrado.');
+    }
 
-    const timeLogs = await TimeLog.find({
-        employee: employeeId,
-        date: { $gte: start, $lte: end }
-    }).sort({ date: 1 }).lean();
+    const timeLogs = await TimeLog.find({
+        employee: employeeId,
+        date: { $gte: start, $lte: end }
+    }).sort({ date: 1 }).lean();
 
-    if (timeLogs.length === 0) {
-        return res.status(404).json({ message: 'No se encontraron registros para este mensajero en el período seleccionado.' });
-    }
+    if (timeLogs.length === 0) {
+        return res.status(404).json({ message: 'No se encontraron registros para este mensajero en el período seleccionado.' });
+    }
 
-    const activeLoan = await Loan.findOne({ employee: employeeId, status: 'Aprobado' }).lean();
-    
-    const workbook = new ExcelJS.Workbook();
-    // ... (creación del workbook sin cambios)
-    const summarySheet = workbook.addWorksheet('Resumen');
-    
-    // --- CÁLCULOS MEJORADOS ---
-    const totalBrutoServicios = timeLogs.reduce((acc, log) => acc + log.valorNetoFinal, 0);
-    
-    let descuentoPrestamo = 0;
-    if (activeLoan) {
-        descuentoPrestamo = Math.min(activeLoan.amount / activeLoan.installments, activeLoan.outstandingBalance);
-    }
-    
-    // --- 2. LÓGICA CONDICIONAL PARA EL DESCUENTO ---
-    let descuentoSeguridadSocial = 0;
-    if (includeSS === 'true') { // El parámetro llega como texto 'true' o 'false'
-        descuentoSeguridadSocial = 95000;
-    }
-    
-    const totalNetoAPagar = totalBrutoServicios - descuentoPrestamo - descuentoSeguridadSocial;
+    // --- Toda tu lógica para la hoja de Resumen está perfecta, no la cambiamos ---
+    const activeLoan = await Loan.findOne({ employee: employeeId, status: 'Aprobado' }).lean();
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'Delivery Express SAS';
+    const summarySheet = workbook.addWorksheet('Resumen');
+    const totalBrutoServicios = timeLogs.reduce((acc, log) => acc + log.valorNetoFinal, 0);
+    let descuentoPrestamo = 0;
+    if (activeLoan) {
+        descuentoPrestamo = Math.min(activeLoan.amount / activeLoan.installments, activeLoan.outstandingBalance);
+    }
+    let descuentoSeguridadSocial = 0;
+    if (includeSS === 'true') {
+        descuentoSeguridadSocial = 95000;
+    }
+    const totalNetoAPagar = totalBrutoServicios - descuentoPrestamo - descuentoSeguridadSocial;
+    summarySheet.mergeCells('A1:D1');
+    summarySheet.getCell('A1').value = `REPORTE DE SERVICIOS - ${employee.fullName}`;
+    summarySheet.getCell('A1').font = { bold: true, size: 16 };
+    summarySheet.getCell('A3').value = 'Periodo:';
+    summarySheet.getCell('B3').value = `${start.toISOString().slice(0,10)} al ${end.toISOString().slice(0,10)}`;
+    summarySheet.getCell('A5').value = 'Subtotal Servicios (Neto):';
+    summarySheet.getCell('B5').value = totalBrutoServicios;
+    summarySheet.getCell('B5').numFmt = '$ #,##0.00';
+    summarySheet.getCell('A6').value = '(-) Descuento Préstamo:';
+    summarySheet.getCell('B6').value = descuentoPrestamo;
+    summarySheet.getCell('B6').numFmt = '$ #,##0.00';
+    summarySheet.getCell('A7').value = '(-) Seg. Social (Estimado):';
+    summarySheet.getCell('B7').value = descuentoSeguridadSocial;
+    summarySheet.getCell('B7').numFmt = '$ #,##0.00';
+    summarySheet.getCell('A8').value = 'TOTAL NETO DEL PERIODO:';
+    summarySheet.getCell('A8').font = { bold: true };
+    summarySheet.getCell('B8').value = totalNetoAPagar;
+    summarySheet.getCell('B8').font = { bold: true };
+    summarySheet.getCell('B8').numFmt = '$ #,##0.00';
+    summarySheet.getColumn('A').width = 35;
+    summarySheet.getColumn('B').width = 20;
 
-    // --- DISEÑO DEL RESUMEN ACTUALIZADO ---
-    summarySheet.mergeCells('A1:D1');
-    summarySheet.getCell('A1').value = `REPORTE DE SERVICIOS - ${employee.fullName}`;
-    summarySheet.getCell('A1').font = { bold: true, size: 16 };
-    summarySheet.getCell('A3').value = 'Periodo:';
-    summarySheet.getCell('B3').value = `${start.toISOString().slice(0,10)} al ${end.toISOString().slice(0,10)}`;
-    
-    summarySheet.getCell('A5').value = 'Subtotal Servicios (Neto):';
-    summarySheet.getCell('B5').value = totalBrutoServicios;
-    summarySheet.getCell('B5').numFmt = '$ #,##0.00';
-    
-    summarySheet.getCell('A6').value = '(-) Descuento Préstamo:';
-    summarySheet.getCell('B6').value = descuentoPrestamo;
-    summarySheet.getCell('B6').numFmt = '$ #,##0.00';
+    // --- HOJA DE DETALLE (Aquí aplicamos los cambios) ---
+    const detailsSheet = workbook.addWorksheet('Detalle de Registros');
 
-    summarySheet.getCell('A7').value = '(-) Seg. Social (Estimado):';
-    summarySheet.getCell('B7').value = descuentoSeguridadSocial;
-    summarySheet.getCell('B7').numFmt = '$ #,##0.00';
+    // --- CAMBIO 1: AÑADIR LAS NUEVAS COLUMNAS DE HORAS ---
+    detailsSheet.columns = [
+        { header: 'Fecha', key: 'date', width: 15, style: { numFmt: 'dd/mm/yyyy' } },
+        { header: 'Empresa', key: 'empresa', width: 25 },
+        { header: 'Hora Inicio', key: 'horaInicio', width: 15 },
+        { header: 'Hora Fin', key: 'horaFin', width: 15 },
+        { header: 'Total Horas (HH:MM)', key: 'totalHorasCalculadas', width: 20 },
+        { header: 'Subtotal', key: 'subtotal', width: 18, style: { numFmt: '$ #,##0.00' } },
+        { header: 'Desc. Almuerzo', key: 'descuentoAlmuerzo', width: 18, style: { numFmt: '$ #,##0.00' } },
+        { header: 'Deducción Préstamo (Ind.)', key: 'totalLoanDeducted', width: 18, style: { numFmt: '$ #,##0.00' } },
+        { header: 'Valor Neto Final', key: 'valorNetoFinal', width: 18, style: { numFmt: '$ #,##0.00' } },
+        { header: 'Estado', key: 'estado', width: 15 },
+    ];
+    
+    // --- CAMBIO 2: CALCULAR LAS HORAS PARA CADA FILA ---
+    let totalMinutesForEmployee = 0;
+    const detailsData = timeLogs.map(log => {
+        let logDurationMinutes = 0;
+        if (log.horaInicio && log.horaFin) {
+            const [startH, startM] = log.horaInicio.split(':').map(Number);
+            const [endH, endM] = log.horaFin.split(':').map(Number);
+            let diffMinutes = (endH * 60 + endM) - (startH * 60 + startM);
+            if (diffMinutes < 0) diffMinutes += 24 * 60;
+            logDurationMinutes = diffMinutes;
+        }
+        totalMinutesForEmployee += logDurationMinutes; // Acumulamos
 
-    summarySheet.getCell('A8').value = 'TOTAL NETO DEL PERIODO:';
-    summarySheet.getCell('A8').font = { bold: true };
-    summarySheet.getCell('B8').value = totalNetoAPagar;
-    summarySheet.getCell('B8').font = { bold: true };
-    summarySheet.getCell('B8').numFmt = '$ #,##0.00';
-    
-    summarySheet.getColumn('A').width = 35;
-    summarySheet.getColumn('B').width = 20;
+        const hours = Math.floor(logDurationMinutes / 60);
+        const minutes = logDurationMinutes % 60;
+        const totalHorasFormato = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
 
-    // --- HOJA DE DETALLE (Sin cambios en su estructura) ---
-    const detailsSheet = workbook.addWorksheet('Detalle de Registros');
-    detailsSheet.columns = [
-        { header: 'Fecha', key: 'date', width: 15, style: { numFmt: 'dd/mm/yyyy' } },
-        { header: 'Empresa', key: 'empresa', width: 25 },
-        { header: 'Subtotal', key: 'subtotal', width: 18, style: { numFmt: '$ #,##0.00' } },
-        { header: 'Desc. Almuerzo', key: 'descuentoAlmuerzo', width: 18, style: { numFmt: '$ #,##0.00' } },
-        { header: 'Deducción Préstamo (Individual)', key: 'totalLoanDeducted', width: 18, style: { numFmt: '$ #,##0.00' } },
-        { header: 'Valor Neto Final', key: 'valorNetoFinal', width: 18, style: { numFmt: '$ #,##0.00' } },
-        { header: 'Estado', key: 'estado', width: 15 },
-    ];
-    
-    const detailsData = timeLogs.map(log => ({
-        date: new Date(log.date),
-        empresa: log.empresa,
-        subtotal: log.subtotal,
-        descuentoAlmuerzo: log.descuentoAlmuerzo,
-        totalLoanDeducted: log.totalLoanDeducted,
-        valorNetoFinal: log.valorNetoFinal,
-        estado: log.isPaid ? 'Pagado' : 'Pendiente'
-    }));
-    detailsSheet.addRows(detailsData);
-    
-    // Autosuma (Sin cambios)
-    const dataRowCount = detailsData.length;
-    if (dataRowCount > 0) {
-        const totalRow = detailsSheet.addRow([]);
-        const totalsLabelCell = totalRow.getCell('E');
-        totalsLabelCell.value = 'TOTAL:';
-        totalsLabelCell.font = { bold: true };
-        totalsLabelCell.alignment = { horizontal: 'right' };
-        const totalsValueCell = totalRow.getCell('F');
-        totalsValueCell.value = { formula: `SUM(F2:F${1 + dataRowCount})` };
-        totalsValueCell.font = { bold: true };
-        totalsValueCell.numFmt = '$ #,##0.00';
-    }
+        return {
+            date: new Date(log.date),
+            empresa: log.empresa,
+            horaInicio: log.horaInicio || 'N/A',
+            horaFin: log.horaFin || 'N/A',
+            totalHorasCalculadas: totalHorasFormato,
+            subtotal: log.subtotal,
+            descuentoAlmuerzo: log.descuentoAlmuerzo,
+            totalLoanDeducted: log.totalLoanDeducted,
+            valorNetoFinal: log.valorNetoFinal,
+            estado: log.isPaid ? 'Pagado' : 'Pendiente'
+        };
+    });
+    detailsSheet.addRows(detailsData);
+    
+    // --- CAMBIO 3: AÑADIR EL TOTAL DE HORAS A LA FILA DE SUMA (Y CORREGIR COLUMNAS) ---
+    const dataRowCount = detailsData.length;
+    if (dataRowCount > 0) {
+        const totalHours = Math.floor(totalMinutesForEmployee / 60);
+        const totalMinutes = totalMinutesForEmployee % 60;
+        const formattedTotalHours = `${String(totalHours).padStart(2, '0')}:${String(totalMinutes).padStart(2, '0')}`;
 
-    const fileName = `Reporte_${employee.fullName.replace(/\s/g, '_')}_${start.toISOString().slice(0,10)}.xlsx`;
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', `attachment; filename=${fileName}`);
-    await workbook.xlsx.write(res);
-    res.end();
+        const totalRow = detailsSheet.addRow([]); // Fila vacía
+        const totalRowData = {
+            'totalHorasCalculadas': formattedTotalHours,
+            'valorNetoFinal': { formula: `SUM(I2:I${1 + dataRowCount})` } // OJO: La columna ahora es la I
+        };
+        const addedTotalRow = detailsSheet.addRow(totalRowData);
+
+        // Ponemos la etiqueta "TOTAL:" en la columna correcta antes de los valores
+        detailsSheet.getCell(`H${addedTotalRow.number}`).value = 'TOTAL:'; // OJO: Columna H
+        detailsSheet.getCell(`H${addedTotalRow.number}`).font = { bold: true };
+        detailsSheet.getCell(`H${addedTotalRow.number}`).alignment = { horizontal: 'right' };
+        addedTotalRow.font = { bold: true };
+    }
+
+    const fileName = `Reporte_${employee.fullName.replace(/\s/g, '_')}_${start.toISOString().slice(0,10)}.xlsx`;
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+    await workbook.xlsx.write(res);
+    res.end();
 });
 const getOwnSettlementReport = asyncHandler(async (req, res) => {
+
+        console.log("--- EJECUTANDO VERSIÓN FINAL DEL REPORTE MAESTRO (CON DETALLES DE CONTACTO) ---");
+
     const employeeId = req.user.profile; // Obtenemos el ID del propio usuario logueado
     const { startDate, endDate } = req.query;
 
@@ -738,6 +752,61 @@ const getOwnSettlementReport = asyncHandler(async (req, res) => {
 });
 
 
+const generateMasterReport = asyncHandler(async (req, res) => {
+    // ... (Esta es la función que arreglamos para el Excel, la incluimos completa)
+    const { startDate, endDate } = req.query;
+    if (!startDate || !endDate) { throw new Error('Las fechas de inicio y fin son requeridas.'); }
+    const start = new Date(startDate);
+    start.setUTCHours(0, 0, 0, 0);
+    const end = new Date(endDate);
+    end.setUTCHours(23, 59, 59, 999);
+    const timeLogs = await TimeLog.find({ date: { $gte: start, $lte: end } }).populate({ path: 'employee', select: 'fullName employeeType idCard phone address' }).lean();
+    const loans = await Loan.find({ dateGranted: { $gte: start, $lte: end }, status: 'Aprobado' }).populate('employee', 'fullName idCard phone address').lean();
+    const otherExpenses = await Expense.find({ date: { $gte: start, $lte: end } }).lean();
+    const clientNames = [...new Set(timeLogs.filter(log => log.employee?.employeeType === 'cliente').map(log => log.empresa))];
+    const clients = await Client.find({ companyName: { $in: clientNames } }).lean();
+    const clientDetailsMap = clients.reduce((map, client) => { map[(client.companyName || '').trim()] = client; return map; }, {});
+    const transactions = [];
+    const incomeByClient = timeLogs.filter(l => l.employee?.employeeType === 'cliente' && l.valorNetoFinal > 0).reduce((acc, log) => { const name = (log.empresa || 'CG').trim(); if (!acc[name]) { acc[name] = { amount: 0, details: clientDetailsMap[name] }; } acc[name].amount += log.valorNetoFinal; return acc; }, {});
+    for (const name in incomeByClient) { const data = incomeByClient[name]; transactions.push({ date: end, description: `Ingresos por servicios a: ${name}`, type: 'income', amount: data.amount, contact: data.details }); }
+    const expensesByEmployee = timeLogs.filter(l => l.employee?.employeeType !== 'cliente' && l.valorNetoFinal > 0).reduce((acc, log) => { const empId = log.employee._id.toString(); if (!acc[empId]) { acc[empId] = { amount: 0, employee: log.employee }; } acc[empId].amount += log.valorNetoFinal; return acc; }, {});
+    for (const empId in expensesByEmployee) { const data = expensesByEmployee[empId]; transactions.push({ date: end, description: `Pago por servicios a: ${data.employee.fullName}`, type: 'expense', amount: data.amount, contact: data.employee }); }
+    loans.forEach(loan => { transactions.push({ date: loan.dateGranted, description: `Préstamo otorgado a: ${loan.employee.fullName}`, amount: loan.amount, type: 'expense', contact: loan.employee }); });
+    otherExpenses.forEach(expense => { transactions.push({ date: expense.date, description: expense.description, amount: expense.amount, type: 'expense', contact: { idCard: expense.payeeId, phone: expense.payeePhone, address: expense.payeeAddress } }); });
+    const workbook = new ExcelJS.Workbook();
+    const ledgerSheet = workbook.addWorksheet('Libro Contable');
+    ledgerSheet.columns = [
+        { header: 'Fecha', key: 'date', width: 15, style: { numFmt: 'dd/mm/yyyy' } }, { header: 'Descripción', key: 'description', width: 40 },
+        { header: 'Cédula/NIT', key: 'contactId', width: 18 }, { header: 'Teléfono', key: 'contactPhone', width: 18 },
+        { header: 'Dirección', key: 'contactAddress', width: 40 }, { header: 'Ingreso', key: 'income', width: 18, style: { numFmt: '$ #,##0.00' } },
+        { header: 'Egreso', key: 'expense', width: 18, style: { numFmt: '$ #,##0.00' } },
+    ];
+    transactions.sort((a, b) => new Date(a.date) - new Date(b.date));
+    transactions.forEach(t => {
+        ledgerSheet.addRow({
+            date: new Date(t.date), description: t.description,
+            contactId: t.contact ? (t.contact.nit || t.contact.idCard || '') : '',
+            contactPhone: t.contact ? (t.contact.phone || '') : '',
+            contactAddress: t.contact ? (t.contact.address || '') : '',
+            income: t.type === 'income' ? t.amount : null, expense: t.type === 'expense' ? t.amount : null,
+        });
+    });
+    const lastDataRow = ledgerSheet.lastRow.number;
+    const totalsRow = ledgerSheet.addRow([]);
+    ledgerSheet.getCell(`E${totalsRow.number}`).value = 'TOTALES:';
+    ledgerSheet.getCell(`F${totalsRow.number}`).value = { formula: `SUM(F2:F${lastDataRow})` };
+    ledgerSheet.getCell(`G${totalsRow.number}`).value = { formula: `SUM(G2:G${lastDataRow})` };
+    totalsRow.font = { bold: true };
+    const balanceRow = ledgerSheet.addRow([]);
+    ledgerSheet.getCell(`E${balanceRow.number}`).value = 'SALDO FINAL:';
+    ledgerSheet.getCell(`F${balanceRow.number}`).value = { formula: `F${totalsRow.number}-G${totalsRow.number}` };
+    balanceRow.font = { bold: true };
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="Reporte_Maestro_Contable_${startDate}_a_${endDate}.xlsx"`);
+    await workbook.xlsx.write(res);
+    res.end();
+});
+
 module.exports = {
     getDashboardStats,
     settleFortnight,
@@ -754,5 +823,6 @@ module.exports = {
     createAuxiliaryForClient,
     deleteAuxiliaryByAdmin,
     getEmployeeSettlementReport,
-     getOwnSettlementReport
+     getOwnSettlementReport,
+     generateMasterReport
 };

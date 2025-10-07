@@ -4,7 +4,7 @@ const Expense = require('../models/Expense');
 // @desc    Crear un nuevo gasto
 // @route   POST /api/expenses
 exports.createExpense = asyncHandler(async (req, res) => {
-    const { description, amount, category, reference, date } = req.body;
+    const { description, amount, category, reference, date, payeeName, payeeId, payeePhone, payeeAddress} = req.body;
 
     if (!description || !amount || !category) {
         res.status(400);
@@ -16,6 +16,10 @@ exports.createExpense = asyncHandler(async (req, res) => {
         amount,
         category,
         reference,
+        payeeName,
+        payeePhone,
+        payeeAddress,
+        payeeId,
         date,
         createdBy: req.user.id // Asocia el gasto con el admin que lo creó
     });

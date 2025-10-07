@@ -11,32 +11,31 @@ const mongoose = require('mongoose');
 
 // Bloque 1: Obtener la lista de todos los clientes
 const getClients = asyncHandler(async (req, res) => {
-    const clients = await Client.find({}).populate('user', 'username').populate('employees');
+    const clients = await Client.find({}).populate('user', 'username').populate('employees');
 
-    const clientsWithTotals = await Promise.all(clients.map(async (client) => {
-        if (!client.employees || client.employees.length === 0) {
-            return { ...client.toObject(), totalACobrar: 0 };
-        }
-        
-        const employeeIds = client.employees.map(emp => emp._id);
+    const clientsWithTotals = await Promise.all(clients.map(async (client) => {
+        if (!client.employees || client.employees.length === 0) {
+            return { ...client.toObject(), totalACobrar: 0 };
+        }
+        
+        const employeeIds = client.employees.map(emp => emp._id);
 
-        // ✅ LÓGICA CORREGIDA: Se añade el filtro isPaid: false
-        const logs = await TimeLog.aggregate([
-            { $match: { 
-                employee: { $in: employeeIds }, 
-                isPaid: false // <-- Suma solo los registros pendientes de liquidación
-            }},
-            { $group: { 
-                _id: null, 
-                totalReceivables: { $sum: '$valorNetoFinal' } // Se usa valorNetoFinal para consistencia
-            }}
-        ]);
+        const logs = await TimeLog.aggregate([
+            { $match: { 
+                employee: { $in: employeeIds }, 
+                isPaid: false // <-- LÓGICA CLAVE: Solo suma los no pagados.
+            }},
+            { $group: { 
+                _id: null, 
+                total: { $sum: '$valorNetoFinal' }
+            }}
+        ]);
 
-        const totalACobrar = logs.length > 0 ? logs[0].totalReceivables : 0;
-        return { ...client.toObject(), totalACobrar };
-    }));
-    
-    res.json(clientsWithTotals);
+        const totalACobrar = logs.length > 0 ? logs[0].total : 0;
+        return { ...client.toObject(), totalACobrar };
+    }));
+    
+    res.json(clientsWithTotals);
 });
 
 // @desc Obtener cliente por ID
@@ -85,123 +84,148 @@ const getClientDashboardData = asyncHandler(async (req, res) => {
 
 // Bloque 5: Exportar registros de cliente
 const exportClientTimeLogsToExcel = asyncHandler(async (req, res) => {
-    // --- 1. OBTENER PARÁMETROS Y FECHAS ---
-    const { clientId } = req.params;
-    const { startDate, endDate } = req.query;
+    // --- 1. OBTENER PARÁMETROS Y FECHAS (Tu código está perfecto) ---
+    const { clientId } = req.params;
+    const { startDate, endDate } = req.query;
 
-    if (!startDate || !endDate) {
-        res.status(400);
-        throw new Error('Por favor, proporciona una fecha de inicio y de fin para el reporte.');
-    }
+    if (!startDate || !endDate) {
+        res.status(400);
+        throw new Error('Por favor, proporciona una fecha de inicio y de fin para el reporte.');
+    }
 
-    const start = new Date(startDate);
-    start.setUTCHours(0, 0, 0, 0);
-    const end = new Date(endDate);
-    end.setUTCHours(23, 59, 59, 999);
+    const start = new Date(startDate);
+    start.setUTCHours(0, 0, 0, 0);
+    const end = new Date(endDate);
+    end.setUTCHours(23, 59, 59, 999);
 
-    // --- 2. RECOPILAR Y AGRUPAR LOS DATOS ---
-    const client = await Client.findById(clientId).populate('employees', 'fullName');
-    if (!client) {
-        throw new Error('Perfil de cliente no encontrado.');
-    }
-    
-    const assignedEmployees = client.employees;
+    // --- 2. RECOPILAR Y AGRUPAR LOS DATOS (Tu código está perfecto) ---
+    const client = await Client.findById(clientId).populate('employees', 'fullName');
+    if (!client) { throw new Error('Perfil de cliente no encontrado.'); }
+    
+    const assignedEmployees = client.employees;
 
-    // --- CAMBIO CLAVE: Buscamos todos los registros en el rango de fechas, SIN importar si están pagos o no ---
-    const timeLogs = await TimeLog.find({
-        employee: { $in: assignedEmployees.map(e => e._id) },
-        date: { $gte: start, $lte: end } // Solo filtramos por fecha
-    }).populate('employee', 'fullName').sort({ 'employee.fullName': 1, date: 1 }).lean();
+    const timeLogs = await TimeLog.find({
+        employee: { $in: assignedEmployees.map(e => e._id) },
+        date: { $gte: start, $lte: end }
+    }).populate('employee', 'fullName').sort({ 'employee.fullName': 1, date: 1 }).lean();
 
-    // El resto de la lógica para agrupar y generar el excel no cambia...
-    const logsByEmployee = {};
-    for (const log of timeLogs) {
-        const employeeId = log.employee._id.toString();
-        if (!logsByEmployee[employeeId]) {
-            logsByEmployee[employeeId] = {
-                name: log.employee.fullName,
-                logs: []
-            };
-        }
-        logsByEmployee[employeeId].logs.push(log);
-    }
-    
-    const workbook = new ExcelJS.Workbook();
-    workbook.creator = 'Delivery Express SAS';
+    const logsByEmployee = {};
+    for (const log of timeLogs) {
+        const employeeId = log.employee._id.toString();
+        if (!logsByEmployee[employeeId]) {
+            logsByEmployee[employeeId] = { name: log.employee.fullName, logs: [] };
+        }
+        logsByEmployee[employeeId].logs.push(log);
+    }
+    
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'Delivery Express SAS';
 
-    const summarySheet = workbook.addWorksheet('Resumen Facturación');
+    // --- HOJA DE RESUMEN (Tu código está perfecto) ---
+    const summarySheet = workbook.addWorksheet('Resumen Facturación');
+    // ... (toda tu lógica para crear el resumen está bien, la dejamos tal cual)
     summarySheet.mergeCells('A1:D1');
-    summarySheet.getCell('A1').value = `FACTURA DE SERVICIOS - ${client.companyName}`;
-    summarySheet.getCell('A1').font = { bold: true, size: 16 };
-    summarySheet.getCell('A1').alignment = { horizontal: 'center' };
-    summarySheet.getCell('A3').value = 'Periodo:';
-    summarySheet.getCell('B3').value = `${start.toISOString().slice(0,10)} al ${end.toISOString().slice(0,10)}`;
-    summarySheet.getCell('A5').value = 'Mensajero';
-    summarySheet.getCell('B5').value = 'Total a Facturar';
-    summarySheet.getRow(5).font = { bold: true };
-
+    summarySheet.getCell('A1').value = `FACTURA DE SERVICIOS - ${client.companyName}`;
+    summarySheet.getCell('A1').font = { bold: true, size: 16 };
+    summarySheet.getCell('A1').alignment = { horizontal: 'center' };
+    summarySheet.getCell('A3').value = 'Periodo:';
+    summarySheet.getCell('B3').value = `${start.toISOString().slice(0,10)} al ${end.toISOString().slice(0,10)}`;
+    summarySheet.getCell('A5').value = 'Mensajero';
+    summarySheet.getCell('B5').value = 'Total a Facturar';
+    summarySheet.getRow(5).font = { bold: true };
     let currentRow = 6;
-    for (const employee of assignedEmployees) {
-        const employeeData = logsByEmployee[employee._id.toString()];
-        const totalForEmployee = employeeData ? employeeData.logs.reduce((sum, log) => sum + log.valorNetoFinal, 0) : 0;
-        
-        summarySheet.getCell(`A${currentRow}`).value = employee.fullName;
-        summarySheet.getCell(`B${currentRow}`).value = totalForEmployee;
-        summarySheet.getCell(`B${currentRow}`).numFmt = '$ #,##0.00';
-        
-        currentRow++;
-    }
-
+    for (const employee of assignedEmployees) {
+        const employeeData = logsByEmployee[employee._id.toString()];
+        const totalForEmployee = employeeData ? employeeData.logs.reduce((sum, log) => sum + log.valorNetoFinal, 0) : 0;
+        summarySheet.getCell(`A${currentRow}`).value = employee.fullName;
+        summarySheet.getCell(`B${currentRow}`).value = totalForEmployee;
+        summarySheet.getCell(`B${currentRow}`).numFmt = '$ #,##0.00';
+        currentRow++;
+    }
     summarySheet.getCell(`A${currentRow}`).value = 'GRAN TOTAL';
-    summarySheet.getCell(`A${currentRow}`).font = { bold: true };
-    const grandTotalCell = summarySheet.getCell(`B${currentRow}`);
-    grandTotalCell.value = { formula: `SUM(B6:B${currentRow - 1})` };
-    grandTotalCell.font = { bold: true };
-    grandTotalCell.numFmt = '$ #,##0.00';
-    summarySheet.getColumn('A').width = 30;
-    summarySheet.getColumn('B').width = 20;
+    summarySheet.getCell(`A${currentRow}`).font = { bold: true };
+    const grandTotalCell = summarySheet.getCell(`B${currentRow}`);
+    grandTotalCell.value = { formula: `SUM(B6:B${currentRow - 1})` };
+    grandTotalCell.font = { bold: true };
+    grandTotalCell.numFmt = '$ #,##0.00';
+    summarySheet.getColumn('A').width = 30;
+    summarySheet.getColumn('B').width = 20;
 
-    for (const employeeId in logsByEmployee) {
-        const employeeData = logsByEmployee[employeeId];
-        const sheetName = `Detalle - ${employeeData.name.substring(0, 20)}`;
-        const detailsSheet = workbook.addWorksheet(sheetName);
+    for (const employeeId in logsByEmployee) {
+        const employeeData = logsByEmployee[employeeId];
+        const sheetName = `Detalle - ${employeeData.name.substring(0, 20)}`;
+        const detailsSheet = workbook.addWorksheet(sheetName);
 
-        detailsSheet.columns = [
-            { header: 'Fecha', key: 'date', width: 15, style: { numFmt: 'dd/mm/yyyy' } },
-            { header: 'Empresa', key: 'empresa', width: 25 },
-            { header: 'Subtotal', key: 'subtotal', width: 18, style: { numFmt: '$ #,##0.00' } },
-            { header: 'Desc. Almuerzo', key: 'descuentoAlmuerzo', width: 18, style: { numFmt: '$ #,##0.00' } },
-            { header: 'Valor Neto Final', key: 'valorNetoFinal', width: 18, style: { numFmt: '$ #,##0.00' } },
-            { header: 'Estado', key: 'estado', width: 15 }, // <-- Columna de Estado
-        ];
-        
-        const detailsData = employeeData.logs.map(log => ({
-            date: new Date(log.date), empresa: log.empresa,
-            subtotal: log.subtotal, descuentoAlmuerzo: log.descuentoAlmuerzo,
-            valorNetoFinal: log.valorNetoFinal,
-            estado: log.isPaid ? 'Pagado' : 'Pendiente' // <-- Lógica del Estado
-        }));
-        detailsSheet.addRows(detailsData);
-        
-        const dataRowCount = detailsData.length;
-        if (dataRowCount > 0) {
-            const totalRow = detailsSheet.addRow([]);
-            const totalsLabelCell = totalRow.getCell('D');
-            totalsLabelCell.value = 'TOTAL:';
-            totalsLabelCell.font = { bold: true };
-            totalsLabelCell.alignment = { horizontal: 'right' };
-            const totalsValueCell = totalRow.getCell('E');
-            totalsValueCell.value = { formula: `SUM(E2:E${1 + dataRowCount})` };
-            totalsValueCell.font = { bold: true };
-            totalsValueCell.numFmt = '$ #,##0.00';
-        }
-    }
+        // --- CAMBIO 1: AÑADIR LAS NUEVAS COLUMNAS DE HORAS ---
+        detailsSheet.columns = [
+            { header: 'Fecha', key: 'date', width: 15, style: { numFmt: 'dd/mm/yyyy' } },
+            { header: 'Empresa', key: 'empresa', width: 25 },
+            { header: 'Hora Inicio', key: 'horaInicio', width: 15 },
+            { header: 'Hora Fin', key: 'horaFin', width: 15 },
+            { header: 'Total Horas (HH:MM)', key: 'totalHorasCalculadas', width: 20 },
+            { header: 'Subtotal', key: 'subtotal', width: 18, style: { numFmt: '$ #,##0.00' } },
+            { header: 'Desc. Almuerzo', key: 'descuentoAlmuerzo', width: 18, style: { numFmt: '$ #,##0.00' } },
+            { header: 'Valor Neto Final', key: 'valorNetoFinal', width: 18, style: { numFmt: '$ #,##0.00' } },
+            { header: 'Estado', key: 'estado', width: 15 },
+        ];
+        
+        // --- CAMBIO 2: CALCULAR LAS HORAS PARA CADA FILA ---
+        let totalMinutesForEmployee = 0;
+        const detailsData = employeeData.logs.map(log => {
+            let logDurationMinutes = 0;
+            if (log.horaInicio && log.horaFin) {
+                const [startH, startM] = log.horaInicio.split(':').map(Number);
+                const [endH, endM] = log.horaFin.split(':').map(Number);
+                let diffMinutes = (endH * 60 + endM) - (startH * 60 + startM);
+                if (diffMinutes < 0) diffMinutes += 24 * 60;
+                logDurationMinutes = diffMinutes;
+            }
+            totalMinutesForEmployee += logDurationMinutes; // Acumulamos los minutos
+            const hours = Math.floor(logDurationMinutes / 60);
+            const minutes = logDurationMinutes % 60;
+            const totalHorasFormato = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
 
-    const fileName = `Factura_${client.companyName.replace(/\s/g, '_')}_${start.toISOString().slice(0,10)}.xlsx`;
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', `attachment; filename=${fileName}`);
-    await workbook.xlsx.write(res);
-    res.end();
+            return {
+                date: new Date(log.date),
+                empresa: log.empresa,
+                horaInicio: log.horaInicio || 'N/A', // Añadimos los campos para la fila
+                horaFin: log.horaFin || 'N/A',
+                totalHorasCalculadas: totalHorasFormato,
+                subtotal: log.subtotal,
+                descuentoAlmuerzo: log.descuentoAlmuerzo,
+                valorNetoFinal: log.valorNetoFinal,
+                estado: log.isPaid ? 'Pagado' : 'Pendiente'
+            };
+        });
+        detailsSheet.addRows(detailsData);
+        
+        const dataRowCount = detailsData.length;
+        if (dataRowCount > 0) {
+            // --- CAMBIO 3: AÑADIR EL TOTAL DE HORAS A LA FILA DE SUMA ---
+            const totalHours = Math.floor(totalMinutesForEmployee / 60);
+            const totalMinutes = totalMinutesForEmployee % 60;
+            const formattedTotalHours = `${String(totalHours).padStart(2, '0')}:${String(totalMinutes).padStart(2, '0')}`;
+            
+            const totalRow = detailsSheet.addRow([]); // Fila vacía para separar
+            const totalRowData = {
+                'totalHorasCalculadas': formattedTotalHours,
+                'valorNetoFinal': { formula: `SUM(H2:H${1 + dataRowCount})` } // OJO: La columna es ahora la H
+            };
+            const addedTotalRow = detailsSheet.addRow(totalRowData);
+            
+            // Añadir la etiqueta "TOTAL:"
+            detailsSheet.getCell(`G${addedTotalRow.number}`).value = 'TOTAL:'; // OJO: La columna es ahora la G
+            detailsSheet.getCell(`G${addedTotalRow.number}`).font = { bold: true };
+            detailsSheet.getCell(`G${addedTotalRow.number}`).alignment = { horizontal: 'right' };
+            addedTotalRow.font = { bold: true };
+        }
+    }
+
+    const fileName = `Factura_${client.companyName.replace(/\s/g, '_')}_${start.toISOString().slice(0,10)}.xlsx`;
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`); // Usar comillas por si hay espacios
+    await workbook.xlsx.write(res);
+    res.end();
 });
 
 // Bloque 6: Obtener auxiliares de un cliente

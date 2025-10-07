@@ -1,16 +1,15 @@
 // backend/models/Client.js
 
-// Bloque 1: Importaciones
 const mongoose = require('mongoose');
 
-// Bloque 2: Definición del Esquema de Notas
+// El esquema de notas no cambia
 const noteSchema = mongoose.Schema({
     text: { type: String, required: true },
     author: { type: String, required: true },
     createdAt: { type: Date, default: Date.now }
 });
 
-// Bloque 3: Definición del Esquema de Cliente
+// Definición del Esquema de Cliente (ACTUALIZADO)
 const clientSchema = mongoose.Schema({
     user: {
         type: mongoose.Schema.Types.ObjectId,
@@ -18,67 +17,40 @@ const clientSchema = mongoose.Schema({
         ref: 'User',
         unique: true
     },
-
     employees: [{
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Employee'
     }],
-
-    fullNameHolder: {
+    fullNameHolder: { type: String, required: true },
+    idCard: { type: String, required: true, unique: true },
+    nit: { type: String, required: true, unique: true },
+    companyName: { type: String, required: true },
+    email: {
         type: String,
-        required: true
+        required: [true, 'Por favor, añade un correo electrónico.'],
+        unique: true,
+        match: [ /^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/, 'Por favor, añade un correo electrónico válido.' ]
     },
 
-    idCard: {
-        type: String,
-        required: true,
-        unique: true
-    },
-
-    nit: {
-        type: String,
-        required: true,
-        unique: true
-    },
-
-    companyName: {
-        type: String,
-        required: true
-    },
-
-email: {
+    // --- AÑADE ESTOS DOS CAMPOS AQUÍ ---
+    phone: {
         type: String,
-        required: [true, 'Por favor, añade un correo electrónico.'],
-        unique: true,
-        match: [
-            /^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/,
-            'Por favor, añade un correo electrónico válido.'
-        ]
+        required: [true, 'El teléfono es obligatorio.'],
     },
+    address: {
+        type: String,
+        required: [true, 'La dirección es obligatoria.'],
+    },
+    // ------------------------------------
 
-    defaultHourlyRate: { // Tarifa horaria normal por defecto
-        type: Number,
-        required: false,
-        default: 0
-    },
-
-    holidayHourlyRate: { // Tarifa horaria para días festivos
-        type: Number,
-        required: false,
-        default: 0
-    },
-
-    isFixed: {
-        type: Boolean,
-        default: false
-    },
-
+    defaultHourlyRate: { type: Number, default: 0 },
+    holidayHourlyRate: { type: Number, default: 0 },
+    isFixed: { type: Boolean, default: false },
     profileNotes: [noteSchema]
 }, {
     timestamps: true
 });
 
-// Bloque 4: Creación y Exportación del Modelo de Cliente
+// Creación y Exportación del Modelo (sin cambios)
 const Client = mongoose.model('Client', clientSchema);
-
 module.exports = Client;

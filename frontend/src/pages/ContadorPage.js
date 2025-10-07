@@ -53,58 +53,47 @@ function ContadorPage() {
         }
     }, [startDate, endDate, handleGenerateReport]);
 
-    // Función para exportar a Excel
-    const handleExportExcel = () => {
-        if (transactions.length === 0) {
-            alert('No hay datos para exportar. Genera el reporte primero.');
-            return;
-        }
+   const handleExportExcel = async () => {
+    // 1. Validamos que las fechas estén seleccionadas
+    if (!startDate || !endDate) {
+        alert('Por favor, selecciona un rango de fechas para exportar.');
+        return;
+    }
 
-        const excelData = [['FECHA', 'DESCRIPCION', 'VALOR', 'TIPO', 'CEDULA', 'TELEFONO', 'DIRECCION', 'EMAIL']];
-        transactions.forEach(item => {
-            excelData.push([
-                new Date(item.date).toLocaleDateString('es-CO'),
-                item.description,
-                item.amount,
-                item.type === 'income' ? 'Ingreso' : 'Egreso',
-                item.cedula || 'N/A',
-                item.telefono || 'N/A',
-                item.direccion || 'N/A',
-                item.email || 'N/A'
-            ]);
-        });
+    try {
+        // 2. Mostramos un mensaje de espera
+        alert('Generando el Reporte Maestro... Esto puede tardar unos segundos.');
 
-        excelData.push([]);
-        excelData.push(['', 'SALDO FINAL:', saldoFinal, '', '', '', '', '']);
+        // 3. Hacemos la llamada a la nueva ruta del backend
+        const response = await API.get('/api/admin/export-master-report', {
+            params: {
+                startDate: startDate,
+                endDate: endDate
+            },
+            responseType: 'blob', // Le decimos que esperamos un archivo
+        });
 
-        const wb = XLSX.utils.book_new();
-        const ws = XLSX.utils.aoa_to_sheet(excelData);
-        ws['!cols'] = [{wch: 12}, {wch: 40}, {wch: 15}, {wch: 15}, {wch: 15}, {wch: 15}, {wch: 30}, {wch: 25}];
+        // 4. Usamos la respuesta del backend para crear y descargar el archivo
+        const blob = new Blob([response.data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        saveAs(blob, `Reporte_Maestro_Contable_${startDate}_a_${endDate}.xlsx`);
 
-        for (let i = 1; i < excelData.length - 2; i++) {
-            const valueCellAddress = XLSX.utils.encode_cell({ r: i, c: 2 });
-            const typeCellAddress = XLSX.utils.encode_cell({ r: i, c: 3 });
-            if (ws[valueCellAddress]) ws[valueCellAddress].z = '#,##0.00';
-            if (ws[typeCellAddress] && excelData[i][3] === 'Egreso') {
-                ws[valueCellAddress].s = { font: { color: { rgb: "FF0000" } } };
-            } else if (ws[typeCellAddress] && excelData[i][3] === 'Ingreso') {
-                ws[valueCellAddress].s = { font: { color: { rgb: "008000" } } };
-            }
-        }
-        
-        const finalBalanceCellAddress = XLSX.utils.encode_cell({ r: excelData.length - 1, c: 2 });
-        if (ws[finalBalanceCellAddress]) {
-            ws[finalBalanceCellAddress].z = '#,##0.00';
-            ws[finalBalanceCellAddress].s = { font: { bold: true, color: { rgb: saldoFinal >= 0 ? "0000FF" : "FF0000" } } };
-        }
-
-        XLSX.utils.book_append_sheet(wb, ws, 'Libro Contable');
-        const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-        const dataBlob = new Blob([excelBuffer], { type: 'application/octet-stream' });
-        saveAs(dataBlob, `Libro_Contable_${startDate}_${endDate}.xlsx`);
-    };
-
-    // Renderizado del componente (JSX)
+    } catch (err) {
+        // 5. Manejamos cualquier error que ocurra
+        console.error('Error al generar el reporte maestro:', err);
+        const errorBlob = err.response?.data;
+        if (errorBlob && errorBlob.toString() === '[object Blob]') {
+            const errorText = await errorBlob.text();
+            try {
+                const errorJson = JSON.parse(errorText);
+                alert(errorJson.message || 'Ocurrió un error en el servidor.');
+            } catch (jsonError) {
+                alert('Ocurrió un error inesperado al generar el reporte.');
+            }
+        } else {
+            alert(err.response?.data?.message || 'Error al generar el reporte. Revisa la consola.');
+        }
+    }
+};
     return (
         <div className="contador-page-container">
             <h1 className="header">Libro Contable Unificado</h1>

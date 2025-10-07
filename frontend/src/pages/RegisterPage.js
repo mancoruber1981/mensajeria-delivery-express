@@ -15,10 +15,9 @@ const RegisterPage = () => {
         fullName: '', address: '', idCard: '', phone: '', email: ''
     });
     const [clientDetails, setClientDetails] = useState({
-        fullNameHolder: '', idCard: '', nit: '', companyName: '', email: ''
-    });
+        fullNameHolder: '', idCard: '', nit: '', companyName: '', email: '', phone: '', address: ''
+    });
     const [formErrors, setFormErrors] = useState({}); // <-- AÑADIDO para manejar errores de validación
-
     const navigate = useNavigate();
 
     // Bloque 2: Manejadores de cambios
@@ -106,7 +105,7 @@ const RegisterPage = () => {
                             <option value="repartidor">Repartidor</option>
                             <option value="cliente">Cliente/Socio</option>
                             <option value="contador">Contador</option>
-                            {/*<option value="admin">Admin</option>*/} 
+                            <option value="admin">Admin</option>
                         </select>
                     </div>
 
@@ -177,12 +176,37 @@ const RegisterPage = () => {
     />
     {formErrors.email && <p className="error-text">{formErrors.email}</p>}
 </div>
-                        </div>
-                    )}
-                    
-                    {/* Credenciales de Acceso */}
-                    <div className="credentials-container">
-                        <h3>Credenciales de Acceso</h3>
+                         <div className="form-group">
+                                <label htmlFor="clientPhone">Teléfono:</label>
+                                <input 
+                                    type="text" 
+                                    id="clientPhone" 
+                                    name="phone" 
+                                    value={clientDetails.phone} 
+                                    onChange={handleClientChange} 
+                                    className={formErrors.phone ? 'input-error' : ''} 
+                                />
+                                {formErrors.phone && <p className="error-text">{formErrors.phone}</p>}
+                            </div>
+
+                            <div className="form-group">
+                                <label htmlFor="clientAddress">Dirección:</label>
+                                <input 
+                                    type="text" 
+                                    id="clientAddress" 
+                                    name="address" 
+                                    value={clientDetails.address} 
+                                    onChange={handleClientChange} 
+                                    className={formErrors.address ? 'input-error' : ''} 
+                                />
+                                {formErrors.address && <p className="error-text">{formErrors.address}</p>}
+                            </div>
+                            {/* --- FIN DE LA ADICIÓN --- */}
+                        </div>
+                    )}
+                    
+                    <div className="credentials-container">
+                        <h3>Credenciales de Acceso</h3>
                         <div className="form-group">
                             <label htmlFor="username">Usuario:</label>
                             <input type="text" id="username" name="username" value={username} onChange={(e) => setUsername(e.target.value)} className={formErrors.username ? 'input-error' : ''} />

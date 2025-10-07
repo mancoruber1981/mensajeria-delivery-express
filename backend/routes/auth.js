@@ -37,7 +37,7 @@ router.put('/me/fix-profile', protect, authorizeRoles('repartidor', 'cliente'), 
 router.post('/me/note', protect, authorizeRoles('repartidor', 'cliente'), addNoteToUserProfile);
 
 // Rutas para la gestión de auxiliares por cliente
-// En backend/routes/auth.js
+
 router.route('/register-auxiliary-by-client').post(protect, authorizeRoles('admin', 'cliente'), registerAuxiliaryByClient);
 
 // ✅ AGREGA ESTA NUEVA RUTA PARA ELIMINAR

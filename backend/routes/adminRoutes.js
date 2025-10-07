@@ -18,7 +18,8 @@ const {
     createAuxiliaryForClient,
     exportClientDataForAdmin,
     deleteAuxiliaryByAdmin,
-    getEmployeeSettlementReport // <-- 1. IMPORTAMOS LA NUEVA FUNCIÓN
+    getEmployeeSettlementReport,
+    generateMasterReport,
 } = require('../controllers/adminController');
 
 const { protect, authorizeRoles } = require('../middleware/authMiddleware');
@@ -30,8 +31,10 @@ router.get('/client-dashboard/:clientId', protect, authorizeRoles('admin'), getC
 router.get('/employees/:employeeId/time-entries', protect, authorizeRoles('admin'), getEmployeeHistoryForAdmin);
 
 // --- RUTAS DE REPORTES Y EXPORTACIONES ---
-router.get('/accountant-report', protect, authorizeRoles('admin'), getAccountantLedger);
+//router.get('/accountant-report', protect, authorizeRoles('admin'), getAccountantLedger);
+router.get('/accountant-report', protect, getAccountantLedger);
 router.get('/export/client/:clientId', protect, authorizeRoles('admin'), exportClientDataForAdmin);
+router.get('/export-master-report', protect, authorizeRoles('admin', 'contador'), generateMasterReport);
 
 // --- 2. AQUÍ ESTÁ LA NUEVA RUTA QUE FALTABA ---
 router.get('/employee/:employeeId/settlement-report', protect, authorizeRoles('admin'), getEmployeeSettlementReport);

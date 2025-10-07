@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import '../index.css'; // Asegúrate de que los estilos globales estén importados
+import '../index.css';
 
 // Un pequeño componente para el icono de la hamburguesa
 const HamburgerIcon = () => (
@@ -39,6 +39,7 @@ const Navbar = () => {
                                 <li><Link to="/admin/clients">Clientes</Link></li>
                                 <li><Link to="/admin/approve-users">Aprobar</Link></li>
                                 <li><Link to="/loans">Préstamos</Link></li>
+                                 <li><Link to="/admin/expenses">Gastos</Link></li>
                             </>
                         )}
                         {user.role === 'repartidor' && (
@@ -54,7 +55,7 @@ const Navbar = () => {
                 ) : (
                     <>
                         <li><Link to="/login">Iniciar Sesión</Link></li>
-                          {/*<li><Link to="/register">Registrarse</Link></li>*/}
+                          <li><Link to="/register">Registrarse</Link></li>
                     </>
                 )}
             </ul>
@@ -75,6 +76,7 @@ const Navbar = () => {
                                 <li><Link to="/admin/clients" onClick={handleLinkClick}>Clientes</Link></li>
                                 <li><Link to="/admin/approve-users" onClick={handleLinkClick}>Aprobar</Link></li>
                                 <li><Link to="/loans" onClick={handleLinkClick}>Préstamos</Link></li>
+                                <li><Link to="/admin/expenses" onClick={handleLinkClick}>Gastos</Link></li>
                             </>
                         )}
                          {user.role === 'repartidor' && (
