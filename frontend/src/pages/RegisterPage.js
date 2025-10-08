@@ -98,7 +98,6 @@ const RegisterPage = () => {
             <div className="register-card">
                 <h2 className="register-header">Registrar Usuario</h2>
                 <form onSubmit={handleSubmit}>
-                    {/* Select de Rol */}
                     <div className="form-group">
                         <label htmlFor="role">Rol:</label>
                         <select id="role" value={role} onChange={(e) => setRole(e.target.value)}>
