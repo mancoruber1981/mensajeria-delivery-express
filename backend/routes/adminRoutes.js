@@ -20,6 +20,7 @@ const {
     deleteAuxiliaryByAdmin,
     getEmployeeSettlementReport,
     generateMasterReport,
+    clearTimeLogs,
 } = require('../controllers/adminController');
 
 const { protect, authorizeRoles } = require('../middleware/authMiddleware');
@@ -53,6 +54,10 @@ router.post('/settle-fortnight', protect, authorizeRoles('admin'), settleFortnig
 router.post('/settle-fortnight/:employeeId', protect, authorizeRoles('admin'), settleFortnightForEmployee);
 router.post('/settle-client/:clientId', protect, authorizeRoles('admin'), settleClientTotal);
 router.get('/preview-settlement/:employeeId', protect, authorizeRoles('admin'), getSettlementPreview);
+router.post('/settle-fortnight', protect, authorizeRoles('admin'), settleFortnight);
 
+
+// --- NUEVA RUTA PARA LIMPIEZA DE HISTORIAL ---
+router.delete('/timelogs', protect, authorizeRoles('admin'), clearTimeLogs);
 
 module.exports = router;

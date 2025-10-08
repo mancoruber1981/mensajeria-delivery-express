@@ -15,6 +15,10 @@ const AdminDashboardPage = () => {
         gananciaEstimada: 0,
     });
 
+    const [endDateToDelete, setEndDateToDelete] = useState('');
+    const [showDeleteModal, setShowDeleteModal] = useState(false);
+    const [confirmationText, setConfirmationText] = useState('');
+
     // We'll use useCallback to keep the function reference stable for the interval
     const fetchData = React.useCallback(async () => {
         if (!user || user.role !== 'admin') {
@@ -80,6 +84,43 @@ const AdminDashboardPage = () => {
     if (loading) return <LoadingSpinner />;
     if (error) return <div className="error-message">Error: {error}</div>;
 
+     const handleClearTimeLogs = async () => {
+        // Doble validación de seguridad
+        if (confirmationText !== 'BORRAR') {
+            toast.error("Debes escribir la palabra BORRAR en mayúsculas para confirmar.");
+            return;
+        }
+        if (!endDateToDelete) {
+            toast.error("Por favor, selecciona una fecha límite.");
+            return;
+        }
+
+        try {
+            toast.info("Procesando eliminación masiva, por favor espera...");
+            // Llamada a la nueva ruta de la API que crearemos en el backend
+            const response = await API.delete(`/api/admin/timelogs`, {
+                data: { 
+                    endDate: endDateToDelete,
+                    onlyPaid: true // Le decimos que solo borre los pagados
+                }
+            });
+            toast.success(response.data.message);
+            
+            // Limpiar y cerrar el modal
+            setShowDeleteModal(false);
+            setConfirmationText('');
+            setEndDateToDelete('');
+
+        } catch (err) {
+            toast.error(err.response?.data?.message || "Error al eliminar los registros.");
+        }
+    };
+    // -----------------------------------------------------------------
+
+    if (loading) return <LoadingSpinner />;
+    if (error) return <div className="error-message">Error: {error}</div>;
+
+
     return (
         <div className="dashboard-container">
             <h1>Panel de Administración</h1>
@@ -124,13 +165,63 @@ const AdminDashboardPage = () => {
                 </Link>
             </div>
             <h2 style={{ marginTop: '2rem' }}>Acciones Administrativas</h2>
-            <div className="navigation-buttons">
-                <button onClick={handleSettleFortnight} className="btn btn-danger">
-                    Liquidar Última Quincena (Global)
+            <div className="navigation-buttons">
+                <button onClick={handleSettleFortnight} className="btn btn-danger">
+                    Liquidar Última Quincena (Global)
+                </button>
+            </div>
+
+            {/* --- NUEVA SECCIÓN: ZONA DE PELIGRO --- */}
+            <div className="dashboard-card danger-zone" style={{ marginTop: '2rem' }}>
+                <h2>Zona de Peligro</h2>
+                <div className="form-group">
+                    <label>Limpiar historial de registros <strong>pagados</strong> anteriores al:</label>
+                    <input 
+                        type="date" 
+                        value={endDateToDelete}
+                        onChange={(e) => setEndDateToDelete(e.target.value)}
+                    />
+                </div>
+                <button 
+                    onClick={() => setShowDeleteModal(true)} 
+                    className="btn btn-danger"
+                    disabled={!endDateToDelete} // El botón se activa solo si se elige una fecha
+                >
+                    Limpiar Historial
                 </button>
             </div>
-        </div>
-    );
+            {/* --- FIN DE LA NUEVA SECCIÓN --- */}
+
+            {/* --- MODAL DE CONFIRMACIÓN (aparece cuando showDeleteModal es true) --- */}
+            {showDeleteModal && (
+                <div className="modal-overlay">
+                    <div className="modal-content">
+                        <h3>⚠️ Acción Irreversible ⚠️</h3>
+                        <p>Estás a punto de eliminar <strong>permanentemente</strong> todos los registros de trabajo (TimeLogs) <strong>PAGADOS</strong> anteriores a la fecha <strong>{endDateToDelete}</strong>.</p>
+                        <p>Esta acción no se puede deshacer.</p>
+                        <div className="form-group">
+                            <label>Para confirmar, escribe la palabra <strong>BORRAR</strong> en mayúsculas:</label>
+                            <input
+                                type="text"
+                                value={confirmationText}
+                                onChange={(e) => setConfirmationText(e.target.value)}
+                                placeholder="BORRAR"
+                            />
+                        </div>
+                        <div className="modal-actions">
+                            <button onClick={() => setShowDeleteModal(false)} className="button-cancel">
+                                Cancelar
+                            </button>
+                            <button onClick={handleClearTimeLogs} className="button-delete">
+                                Sí, entiendo, eliminar historial
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+            {/* --- FIN DEL MODAL --- */}
+        </div>
+    );
 };
 
 export default AdminDashboardPage;

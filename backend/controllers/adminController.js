@@ -11,7 +11,6 @@ const Loan = require('../models/Loan');
 const Expense = require('../models/Expense'); 
 const ExtraIncome = require('../models/ExtraIncome');
 
-
 const getDashboardStats = asyncHandler(async (req, res) => {
     try {
         const totalEmployees = await Employee.countDocuments();
@@ -849,6 +848,43 @@ const generateMasterReport = asyncHandler(async (req, res) => {
     res.end();
 });
 
+const clearTimeLogs = asyncHandler(async (req, res) => {
+    const { endDate, onlyPaid } = req.body;
+
+    if (!endDate) {
+        res.status(400);
+        throw new Error("Se requiere una fecha límite para la eliminación.");
+    }
+
+    const dateLimit = new Date(endDate);
+    
+    // --- ¡AQUÍ ESTÁ LA CORRECCIÓN! ---
+    // Ajustamos la fecha para que tome hasta el final del día (23:59:59 en UTC).
+    // Así nos aseguramos de incluir todos los registros creados en esa fecha.
+    dateLimit.setUTCHours(23, 59, 59, 999);
+    // ------------------------------------
+    
+    const filter = {
+        date: { $lte: dateLimit } // Borrar registros con fecha menor o igual a la seleccionada
+    };
+
+    // Mantenemos nuestra regla de seguridad de borrar solo los pagados
+    if (onlyPaid) {
+        filter.isPaid = true;
+    }
+
+    const count = await TimeLog.countDocuments(filter);
+
+    if (count === 0) {
+        // Es posible que este sea el mensaje que recibes si no hay registros PAGADOS que cumplan el criterio
+        return res.status(200).json({ message: "No se encontraron registros pagados que coincidan con los criterios para eliminar." });
+    }
+
+    await TimeLog.deleteMany(filter);
+
+    res.status(200).json({ message: `${count} registro(s) histórico(s) ha(n) sido eliminado(s) exitosamente.` });
+});
+
 module.exports = {
     getDashboardStats,
     settleFortnight,
@@ -866,5 +902,6 @@ module.exports = {
     deleteAuxiliaryByAdmin,
     getEmployeeSettlementReport,
      getOwnSettlementReport,
-     generateMasterReport
+     generateMasterReport,
+     clearTimeLogs,
 };
