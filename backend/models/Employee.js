@@ -17,7 +17,7 @@ const employeeSchema = mongoose.Schema({
     },
     fullName: { type: String, required: true },
     address: { type: String, required: false },
-    idCard: { type: String, required: true, unique: true },
+    idCard: { type: String, required: true },
     phone: { type: String, required: true },
     email: { type: String, required: false },
     role: {

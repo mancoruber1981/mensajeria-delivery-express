@@ -80,56 +80,65 @@ const getEmployeeById = asyncHandler(async (req, res) => {
     res.json(employee);
 });
 
-// --- FUNCIÓN 3: Crear un empleado por un cliente ---
+// --- FUNCIÓN 3: Crear un empleado (registro informativo) - VERSIÓN FINAL CORREGIDA ---
 const createEmployeeByClient = asyncHandler(async (req, res) => {
+    // 1. Obtener los datos visibles que vienen del frontend.
     const { fullName, idCard, phone, clientId } = req.body;
+
+    // 2. Validación de los datos que SÍ deben venir del formulario.
     if (!fullName || !idCard || !phone) {
-        res.status(400).json({ message: 'Nombre, cédula y teléfono son requeridos.' });
-        return;
+        res.status(400);
+        throw new Error('Nombre completo, cédula y teléfono son requeridos.');
     }
-    
+
     try {
+        // 3. Lógica para encontrar el perfil del cliente (Tu lógica es perfecta y se mantiene).
         let clientProfile;
         if (req.user.role === 'admin' && clientId) {
-            clientProfile = await Client.findById(clientId).populate('employees');
+            clientProfile = await Client.findById(clientId);
         } else if (req.user.role === 'cliente') {
-            clientProfile = await Client.findOne({ user: req.user.id }).populate('employees');
+            clientProfile = await Client.findOne({ user: req.user._id });
         } else if (req.user.role === 'auxiliar') {
-            clientProfile = await Client.findById(req.user.associatedClient).populate('employees');
+            clientProfile = await Client.findById(req.user.associatedClient);
         }
 
         if (!clientProfile) {
             res.status(404);
             throw new Error('No se encontró un perfil de cliente asociado.');
         }
-        
-        const employeeExists = clientProfile.employees.some(emp => emp.idCard === idCard);
-        if (employeeExists) {
-            res.status(400);
-            throw new Error('Ya has registrado un empleado con esa cédula.');
-        }
 
-        const employee = await Employee.create({
-            fullName,
-            idCard,
-            phone,
-            role: 'empleado',
-            employeeType: 'cliente',
-            // ✅ CORRECCIÓN: Asigna el ID del CLIENTE, no del auxiliar
-            user: clientProfile.user 
+        // 4. ✨ LA CORRECCIÓN DEFINITIVA: Construir el objeto COMPLETO del empleado ✨
+        // Creamos el perfil del empleado combinando los datos del frontend
+        // con los datos predeterminados ("autollenados") que el modelo requiere.
+        const newEmployee = await Employee.create({
+            fullName: fullName,       // Dato del frontend
+            idCard: idCard,           // Dato del frontend
+            phone: phone,             // Dato del frontend
+            idClient: clientProfile._id, // Dato obtenido de la lógica
+            role: 'empleado',         // DATO PREDETERMINADO/AUTOLLENADO
+            employeeType: 'cliente'   // DATO PREDETERMINADO/AUTOLLENADO
         });
 
-        clientProfile.employees.push(employee._id);
-        await clientProfile.save();
-        res.status(201).json({ message: 'Empleado registrado y asociado con éxito.', employee });
+        // 5. Actualizar la lista de empleados del cliente de forma segura.
+        await Client.updateOne(
+            { _id: clientProfile._id },
+            { $push: { employees: newEmployee._id } }
+        );
+
+        res.status(201).json({
+            message: 'Empleado registrado y asociado con éxito.',
+            employee: newEmployee
+        });
 
     } catch (err) {
-        console.error("Error en createEmployeeByClient:", err);
-        // Si el error sigue siendo de duplicado, es por el índice en la DB
+        console.error("Error en createEmployeeByClient:", err.message);
+        
         if (err.code === 11000) {
-            throw new Error('Error de duplicado. Asegúrate de haber eliminado el índice "user_1" de la colección "employees" en la base de datos.');
+             res.status(400);
+             throw new Error(`Error de duplicado: Ya existe un empleado con la cédula ${idCard}.`);
         }
-        throw new Error('Error interno al crear el perfil del empleado.');
+        res.status(500);
+        throw new Error(err.message || 'Error interno al crear el perfil del empleado.');
     }
 });
 
