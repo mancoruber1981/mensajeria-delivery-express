@@ -583,15 +583,24 @@ const getEmployeeSettlementReport = asyncHandler(async (req, res) => {
     }
 
     // --- Toda tu lógica para la hoja de Resumen está perfecta, no la cambiamos ---
-    const activeLoan = await Loan.findOne({ employee: employeeId, status: 'Aprobado' }).lean();
-    const workbook = new ExcelJS.Workbook();
-    workbook.creator = 'Delivery Express SAS';
-    const summarySheet = workbook.addWorksheet('Resumen');
-    const totalBrutoServicios = timeLogs.reduce((acc, log) => acc + log.valorNetoFinal, 0);
-    let descuentoPrestamo = 0;
-    if (activeLoan) {
-        descuentoPrestamo = Math.min(activeLoan.amount / activeLoan.installments, activeLoan.outstandingBalance);
-    }
+   const activeLoans = await Loan.find({ 
+    employee: employeeId, 
+    status: 'Aprobado',
+    outstandingBalance: { $gt: 0 } // Solo consideramos préstamos con saldo pendiente
+}).lean();
+
+// 2. Calculamos el descuento total SUMANDO las cuotas de CADA préstamo
+const descuentoPrestamo = activeLoans.reduce((total, loan) => {
+    // Calculamos la cuota para el préstamo actual en el bucle
+    const installmentAmount = loan.amount / loan.installments;
+
+    // Nos aseguramos de no descontar más de lo que se debe
+    const deductionForThisLoan = Math.min(installmentAmount, loan.outstandingBalance);
+
+    // Usamos "return total + ..." para ir SUMANDO el descuento de cada préstamo
+    return total + deductionForThisLoan;
+}, 0); // El '0' es el valor inicial de nuestro 'total'
+// --- FIN DEL BLOQUE CORREGIDO ---
     let descuentoSeguridadSocial = 0;
     if (includeSS === 'true') {
         descuentoSeguridadSocial = 95000;
