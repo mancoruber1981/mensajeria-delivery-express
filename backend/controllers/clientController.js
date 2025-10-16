@@ -121,9 +121,8 @@ const exportClientTimeLogsToExcel = asyncHandler(async (req, res) => {
     const workbook = new ExcelJS.Workbook();
     workbook.creator = 'Delivery Express SAS';
 
-    // --- HOJA DE RESUMEN (Tu código está perfecto) ---
     const summarySheet = workbook.addWorksheet('Resumen Facturación');
-    // ... (toda tu lógica para crear el resumen está bien, la dejamos tal cual)
+    
     summarySheet.mergeCells('A1:D1');
     summarySheet.getCell('A1').value = `FACTURA DE SERVICIOS - ${client.companyName}`;
     summarySheet.getCell('A1').font = { bold: true, size: 16 };
