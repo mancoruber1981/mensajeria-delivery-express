@@ -16,28 +16,47 @@ const getDashboardStats = asyncHandler(async (req, res) => {
         const totalEmployees = await Employee.countDocuments();
         const totalClients = await Client.countDocuments();
         const totalUsers = await User.countDocuments();
-        const clients = await Client.find({}).select('employees');
-        const employeeIdsOfClients = clients.flatMap(client => client.employees);
-        const cobrarRes = await TimeLog.aggregate([
-            { $match: { isPaid: false, employee: { $in: employeeIdsOfClients } } },
-            { $group: { _id: null, total: { $sum: '$valorNetoFinal' } } }
-        ]);
 
-        const pagarRes = await TimeLog.aggregate([
-            { $match: { isPaid: false } },
+        // ✨ LÓGICA CORREGIDA Y OPTIMIZADA: Calculamos todo en una sola consulta.
+        const totalsResult = await TimeLog.aggregate([
+            // 1. Buscamos solo los registros pendientes de pago.
+            { $match: { isPaid: false } },
+            
+            // 2. Unimos cada registro con la información de su empleado.
             { $lookup: { from: 'employees', localField: 'employee', foreignField: '_id', as: 'employeeInfo' } },
             { $unwind: '$employeeInfo' },
-            { $match: { 'employeeInfo.employeeType': { $ne: 'cliente' } } },
-            { $group: { _id: null, total: { $sum: '$valorNetoFinal' } } }
+
+            // 3. Agrupamos TODO en un solo resultado y sumamos condicionalmente.
+            { 
+                $group: { 
+                    _id: null,
+                    // ✨ LA CORRECCIÓN CLAVE: Sumamos el 'valorNeto' (con almuerzo descontado).
+                    totalACobrar: { 
+                        $sum: { $cond: [{ $eq: ['$employeeInfo.employeeType', 'cliente'] }, '$valorNeto', 0] }
+                    },
+                    // Sumamos el 'valorNetoFinal' para lo que se paga al repartidor.
+                    totalAPagar: { 
+                        $sum: { $cond: [{ $ne: ['$employeeInfo.employeeType', 'cliente'] }, '$valorNetoFinal', 0] }
+                    }
+                } 
+            }
         ]);
 
-        const totalACobrar = cobrarRes[0]?.total || 0;
-        const totalAPagar = pagarRes[0]?.total || 0;
-        const gananciaEstimada = totalACobrar - totalAPagar;
+        const totals = totalsResult[0] || { totalACobrar: 0, totalAPagar: 0 };
+        const gananciaEstimada = totals.totalACobrar - totals.totalAPagar;
 
-        res.json({ stats: { totalEmployees, totalClients, totalUsers, totalACobrar, totalAPagar, gananciaEstimada } });
+        res.json({ 
+            stats: { 
+                totalEmployees, 
+                totalClients, 
+                totalUsers, 
+                totalACobrar: totals.totalACobrar, 
+                totalAPagar: totals.totalAPagar, 
+                gananciaEstimada 
+            } 
+        });
     } catch (error) {
-        res.status(500).json({ message: 'Error al obtener las estadísticas', error: error.message });
+        res.status(500).json({ message: 'Error al obtener las estadísticas', error: error.message });
     }
 });
 const settleFortnight = asyncHandler(async (req, res) => {
@@ -349,42 +368,61 @@ const registerEmployee = asyncHandler(async (req, res) => {
 });
 
 const getClientDashboardById = asyncHandler(async (req, res) => {
-    const { clientId } = req.params;
-    // ... (tus validaciones no cambian) ...
-    const client = await Client.findById(clientId).populate('employees', 'fullName idCard phone');
-    if (!client) { throw new Error('Cliente no encontrado.'); }
-    const employeeIds = client.employees.map(e => e._id);
-    const auxiliaries = await User.find({ role: 'auxiliar', associatedClient: client._id }).select('username').lean();
-    if (!employeeIds.length) {
-        return res.json({
-            clientProfile: { companyName: client.companyName },
-            dashboardData: { employeesList: [], grandTotal: 0 },
-            auxiliaries
-        });
+    const { clientId } = req.params;
+    
+    const client = await Client.findById(clientId).populate('employees', 'fullName idCard phone');
+    if (!client) { 
+        res.status(404);
+        throw new Error('Cliente no encontrado.'); 
     }
 
-    // ✅ LÓGICA CORREGIDA: Suma TODOS los registros pendientes de este cliente
-    const paymentTotals = await TimeLog.aggregate([
-        { $match: { employee: { $in: employeeIds }, isPaid: false } }, // Solo registros pendientes
-        { $group: { _id: '$employee', totalAPagar: { $sum: '$valorNetoFinal' } } }
-    ]);
+    const employeeIds = client.employees.map(e => e._id);
+    const auxiliaries = await User.find({ role: 'auxiliar', associatedClient: client._id }).select('username').lean();
 
-    const totalsMap = paymentTotals.reduce((acc, { _id, totalAPagar }) => {
-        acc[_id.toString()] = totalAPagar; return acc;
-    }, {});
-    const grandTotal = Object.values(totalsMap).reduce((s, t) => s + t, 0);
-    const employeesList = client.employees.map(e => ({
-        _id: e._id,
-        fullName: e.fullName,
-        idCard: e.idCard,
-        phone: e.phone,
-        totalAPagar: totalsMap[e._id.toString()] || 0
-    }));
-    res.json({
-        clientProfile: { companyName: client.companyName, defaultHourlyRate: client.defaultHourlyRate, holidayHourlyRate: client.holidayHourlyRate },
-        dashboardData: { employeesList, grandTotal },
-        auxiliaries
-    });
+    if (!employeeIds.length) {
+        return res.json({
+            clientProfile: client,
+            dashboardData: { employeesList: [], grandTotal: 0 },
+            auxiliaries
+        });
+    }
+
+    // ✨ LÓGICA CORREGIDA Y FINAL: Calculamos los totales correctos.
+    const totalsAggregation = await TimeLog.aggregate([
+        { $match: { employee: { $in: employeeIds }, isPaid: false } },
+        { 
+            $group: { 
+                _id: '$employee', 
+                totalAPagarEmpleado: { $sum: '$valorNetoFinal' },
+                // ✨ LA CORRECCIÓN CLAVE: Sumamos el 'valorNeto' (con almuerzo descontado).
+                totalACobrarPorEmpleado: { $sum: '$valorNeto' } 
+            } 
+        }
+    ]);
+
+    const totalsMap = totalsAggregation.reduce((acc, item) => {
+        acc[item._id.toString()] = {
+            totalAPagar: item.totalAPagarEmpleado,
+            totalACobrar: item.totalACobrarPorEmpleado
+        };
+        return acc;
+    }, {});
+
+    const grandTotalACobrar = Object.values(totalsMap).reduce((sum, item) => sum + item.totalACobrar, 0);
+
+    const employeesList = client.employees.map(e => ({
+        _id: e._id,
+        fullName: e.fullName,
+        idCard: e.idCard,
+        phone: e.phone,
+        totalAPagar: totalsMap[e._id.toString()]?.totalAPagar || 0
+    }));
+
+    res.json({
+        clientProfile: client,
+        dashboardData: { employeesList, grandTotal: grandTotalACobrar }, 
+        auxiliaries
+    });
 });
 
 // ESTA ES LA FUNCIÓN PARA LA PÁGINA DE HISTORIAL
@@ -898,6 +936,24 @@ const clearTimeLogs = asyncHandler(async (req, res) => {
     res.status(200).json({ message: `${count} registro(s) histórico(s) ha(n) sido eliminado(s) exitosamente.` });
 });
 
+const getAuxiliariesForClientByAdmin = asyncHandler(async (req, res) => {
+    const { clientId } = req.params;
+
+    // Buscamos en la colección de Usuarios a todos los que tengan el rol 'auxiliar'
+    // y que estén asociados con el ID del cliente que nos llega por la URL.
+    const auxiliaries = await User.find({ 
+        role: 'auxiliar', 
+        associatedClient: clientId 
+    }).select('username createdAt'); // Seleccionamos solo los datos que necesitamos
+
+    if (!auxiliaries) {
+        res.status(404);
+        throw new Error('No se encontraron auxiliares para este cliente.');
+    }
+
+    res.status(200).json(auxiliaries);
+});
+
 module.exports = {
     getDashboardStats,
     settleFortnight,
@@ -917,4 +973,7 @@ module.exports = {
      getOwnSettlementReport,
      generateMasterReport,
      clearTimeLogs,
+     getAuxiliariesForClientByAdmin,
+    
+     
 };

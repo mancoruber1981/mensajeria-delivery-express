@@ -93,8 +93,8 @@ const RepartidorDashboardPage = () => {
     const [editingLog, setEditingLog] = useState(null);
     const [formData, setFormData] = useState({
         date: new Date().toISOString().split('T')[0],
-        horaInicio: '',
-        horaFin: '',
+        horaInicio: '08:00',
+        horaFin: '16:30',
         valorHora: '0',
         festivo: false,
         descuentoAlmuerzo: '0',
@@ -107,6 +107,7 @@ const RepartidorDashboardPage = () => {
     const [horasBrutas, setHorasBrutas] = useState('0:00');
     const [subtotal, setSubtotal] = useState(0);
     const [valorNeto, setValorNeto] = useState(0);
+    const [almuerzoDescontadoDisplay, setAlmuerzoDescontadoDisplay] = useState(0);
     const [valorFinalConDeducciones, setValorFinalConDeducciones] = useState(0);
     const [pageLoading, setPageLoading] = useState(true);
     const [error, setError] = useState(null);
@@ -114,54 +115,54 @@ const RepartidorDashboardPage = () => {
 
 // ==================== BLOQUE 3: Lógica de Recálculo de Totales (useCallback) ====================
     const recalculateTotals = useCallback((data) => {
-        const { horaInicio, horaFin, valorHora, minutosAlmuerzoSinPago, montoPrestamoDeducir } = data;
+        const { horaInicio, horaFin, valorHora, minutosAlmuerzoSinPago, montoPrestamoDeducir } = data;
 
-        if (horaInicio && horaFin && valorHora) {
-            const [startHours, startMinutes] = horaInicio.split(':').map(Number);
-            const [endHours, endMinutes] = horaFin.split(':').map(Number);
+        if (horaInicio && horaFin && valorHora) {
+            const [startHours, startMinutes] = horaInicio.split(':').map(Number);
+            const [endHours, endMinutes] = horaFin.split(':').map(Number);
 
-            let totalMinutesBrutos = (endHours * 60 + endMinutes) - (startHours * 60 + startMinutes);
-            if (totalMinutesBrutos < 0) {
-                totalMinutesBrutos += 24 * 60;
-            }
+            let totalMinutesBrutos = (endHours * 60 + endMinutes) - (startHours * 60 + startMinutes);
+            if (totalMinutesBrutos < 0) {
+                totalMinutesBrutos += 24 * 60;
+            }
 
-            const minutosSinPagoNum = parseInt(minutosAlmuerzoSinPago, 10) || 0;
-            const valorHoraNum = parseFloat(valorHora) || 0;
-            const prestamoADeducir = parseFloat(montoPrestamoDeducir) || 0;
+            const minutosSinPagoNum = parseInt(minutosAlmuerzoSinPago, 10) || 0;
+            const valorHoraNum = parseFloat(valorHora) || 0;
+            const prestamoADeducir = parseFloat(montoPrestamoDeducir) || 0;
 
-            const totalMinutesNetos = totalMinutesBrutos - minutosSinPagoNum;
-            const valorNetoCalculado = (totalMinutesNetos / 60) * valorHoraNum;
-            const subtotalCalculado = (totalMinutesBrutos / 60) * valorHoraNum;
-            const finalValue = valorNetoCalculado - prestamoADeducir;
-            const horasBrutasFormato = formatHoursAndMinutes(totalMinutesBrutos / 60);
+            const almuerzoDescontadoCalculado = (minutosSinPagoNum / 60) * valorHoraNum;
+            const subtotalCalculado = (totalMinutesBrutos / 60) * valorHoraNum;
+            const valorNetoCalculado = subtotalCalculado - almuerzoDescontadoCalculado;
+            const finalValue = valorNetoCalculado - prestamoADeducir;
+            const horasBrutasFormato = formatHoursAndMinutes(totalMinutesBrutos / 60);
 
-            return {
-                minutosBrutos: totalMinutesBrutos,
-                horasBrutas: horasBrutasFormato,
-                subtotal: subtotalCalculado,
-                valorNeto: valorNetoCalculado,
-                valorFinalConDeducciones: finalValue
-            };
-        } else {
-            return {
-                minutosBrutos: 0,
-                horasBrutas: '00:00',
-                subtotal: 0,
-                valorNeto: 0,
-                valorFinalConDeducciones: 0
-            };
-        }
-    }, []);
-
+            return {
+                horasBrutas: horasBrutasFormato,
+                subtotal: subtotalCalculado,
+                almuerzoDescontado: almuerzoDescontadoCalculado, // Devolvemos este nuevo valor
+                valorNeto: valorNetoCalculado,
+                valorFinalConDeducciones: finalValue
+            };
+        } else {
+            return {
+                horasBrutas: '00:00',
+                subtotal: 0,
+                almuerzoDescontado: 0,
+                valorNeto: 0,
+                valorFinalConDeducciones: 0
+            };
+        }
+    }, []);
 
 // ==================== BLOQUE 4: useEffect para Actualizar Cálculos ====================
     useEffect(() => {
-        const results = recalculateTotals(formData);
-        setHorasBrutas(results.horasBrutas);
-        setSubtotal(results.subtotal);
-        setValorNeto(results.valorNeto);
-        setValorFinalConDeducciones(results.valorFinalConDeducciones);
-    }, [formData, recalculateTotals]);
+        const results = recalculateTotals(formData);
+        setHorasBrutas(results.horasBrutas);
+        setSubtotal(results.subtotal);
+        setAlmuerzoDescontadoDisplay(results.almuerzoDescontado); // Actualiza el estado de display
+        setValorNeto(results.valorNeto);
+        setValorFinalConDeducciones(results.valorFinalConDeducciones);
+    }, [formData, recalculateTotals]);
 
 
 // ==================== BLOQUE 5: useEffect para Editar Registros ====================
@@ -263,22 +264,22 @@ const RepartidorDashboardPage = () => {
     // Asegúrate de tener una función recalculateTotals en este archivo
     const calculatedValues = recalculateTotals(formData); 
 
-    const dataToSend = {
-        employee: currentTargetEmployeeId,
-        date: formData.date,
-        horaInicio: formData.horaInicio,
-        horaFin: formData.horaFin,
-        valorHora: parseFloat(formData.valorHora),
-        festivo: formData.festivo,
-        descuentoAlmuerzo: parseFloat(formData.descuentoAlmuerzo),
-        minutosAlmuerzoSinPago: parseInt(formData.minutosAlmuerzoSinPago, 10),
-        empresa: formData.empresa.trim(),
-        totalLoanDeducted: parseFloat(formData.montoPrestamoDeducir) || 0,
-        horasBrutas: calculatedValues.minutosBrutos / 60,
-        subtotal: calculatedValues.subtotal,
-        valorNeto: calculatedValues.valorNeto,
-        valorNetoFinal: calculatedValues.valorFinalConDeducciones,
-    };
+    const dataToSend = {
+        employee: currentTargetEmployeeId,
+        date: formData.date,
+        horaInicio: formData.horaInicio,
+        horaFin: formData.horaFin,
+        valorHora: parseFloat(formData.valorHora),
+        festivo: formData.festivo,
+        descuentoAlmuerzo: calculatedValues.almuerzoDescontado, // Usamos el valor calculado
+        minutosAlmuerzoSinPago: parseInt(formData.minutosAlmuerzoSinPago, 10) || 0,
+        empresa: formData.empresa.trim(),
+        totalLoanDeducted: parseFloat(formData.montoPrestamoDeducir) || 0,
+        horasBrutas: calculatedValues.minutosBrutos / 60,
+        subtotal: calculatedValues.subtotal,
+        valorNeto: calculatedValues.valorNeto,
+        valorNetoFinal: calculatedValues.valorFinalConDeducciones,
+    };
 
     try {
         if (editingLog && editingLog._id) {
@@ -442,12 +443,17 @@ const totals = calculateTotals(timeLogs);
                         </div>
                         <div className="form-row">
                             <div className="form-group form-group-half">
-                                <label>Descuento Almuerzo ($):</label>
-                                <input type="number" name="descuentoAlmuerzo" value={formData.descuentoAlmuerzo} onChange={handleFormChange} />
-                            </div>
-                            <div className="form-group form-group-half">
-                                <label>Minutos de Almuerzo (sin pago):</label>
-                                <input type="number" name="minutosAlmuerzoSinPago" value={formData.minutosAlmuerzoSinPago} onChange={handleFormChange} />
+                                <label>Descuento Almuerzo ($) (Calculado):</label>
+                                <input 
+                                    type="text" 
+                                    value={almuerzoDescontadoDisplay.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} 
+                                    readOnly 
+                                    className="read-only-input" 
+                                />
+                            </div>
+                            <div className="form-group form-group-half">
+                                <label>Minutos de Almuerzo (sin pago):</label>
+                                <input type="number" name="minutosAlmuerzoSinPago" value={formData.minutosAlmuerzoSinPago} onChange={handleFormChange} />
                             </div>
                         </div>
                         <div className="form-row">

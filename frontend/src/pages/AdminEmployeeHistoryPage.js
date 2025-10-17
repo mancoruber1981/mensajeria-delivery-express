@@ -84,46 +84,32 @@ if (user) {
 
     // Bloque 6: Función de Recálculo de Totales (Lógica Corregida)
     const recalculateTotals = useCallback((data) => {
-        const { horaInicio, horaFin, valorHora, descuentoAlmuerzo, minutosAlmuerzoSinPago, montoPrestamoDeducir } = data;
-        
-        if (horaInicio && horaFin && valorHora) {
-            const start = new Date(`1970-01-01T${horaInicio}:00`);
-            let end = new Date(`1970-01-01T${horaFin}:00`);
-            if (end < start) end.setDate(end.getDate() + 1);
-            
-            const totalDiffMs = end - start;
-            const valorHoraNum = parseFloat(valorHora) || 0;
-            
-            const totalHoursDecimal = totalDiffMs / (1000 * 60 * 60);
-            
-            let almuerzoADescontar = 0;
-            const minutosSinPagoNum = parseInt(minutosAlmuerzoSinPago, 10) || 0;
+        const { horaInicio, horaFin, valorHora, minutosAlmuerzoSinPago, montoPrestamoDeducir } = data;
+        
+        if (horaInicio && horaFin && valorHora) {
+            const start = new Date(`1970-01-01T${horaInicio}:00`);
+            let end = new Date(`1970-01-01T${horaFin}:00`);
+            if (end < start) end.setDate(end.getDate() + 1);
+            
+            const totalDiffMs = end - start;
+            const valorHoraNum = parseFloat(valorHora) || 0;
+            const totalHoursDecimal = totalDiffMs / (1000 * 60 * 60);
+            const minutosSinPagoNum = parseInt(minutosAlmuerzoSinPago, 10) || 0;
+            const almuerzoADescontar = (minutosSinPagoNum / 60) * valorHoraNum;
+            
+            const sub = totalHoursDecimal * valorHoraNum;
+            const total = sub - almuerzoADescontar;
+            const prestamoADeducir = parseFloat(montoPrestamoDeducir) || 0;
+            const finalValue = total - prestamoADeducir;
 
-            if (isAuxiliar) {
-                almuerzoADescontar = (minutosSinPagoNum / 60) * valorHoraNum;
-            } else {
-                almuerzoADescontar = parseFloat(descuentoAlmuerzo) || 0;
-            }
-            
-            const sub = totalHoursDecimal * valorHoraNum;
-            
-            const total = sub - almuerzoADescontar;
-            
-            const prestamoADeducir = parseFloat(montoPrestamoDeducir) || 0;
-            const finalValue = total - prestamoADeducir;
-
-            // ✅ Establecemos las horas totales antes de la deducción de minutos
-            setHorasTotales(totalHoursDecimal); 
-            setSubtotal(sub);
-            setValorNeto(total);
-            setValorFinalConDeducciones(finalValue);
-        } else {
-            setHorasTotales(0);
-            setSubtotal(0);
-            setValorNeto(0);
-            setValorFinalConDeducciones(0);
-        }
-    }, [isAuxiliar]);
+            setHorasTotales(totalHoursDecimal); 
+            setSubtotal(sub);
+            setValorNeto(total);
+            setValorFinalConDeducciones(finalValue);
+        } else {
+            setHorasTotales(0); setSubtotal(0); setValorNeto(0); setValorFinalConDeducciones(0);
+        }
+    }, []);
 
     // Bloque 9: Función para Obtener Registros de Tiempo
     const fetchTimeLogs = useCallback(async () => {
@@ -144,39 +130,61 @@ if (user) {
 
     // Bloque 10 REFACTORIZADO: Cargar detalles del empleado, tarifas del cliente y logs en un solo useEffect
 useEffect(() => {
-    // Si no hay un ID de empleado, no hacemos nada.
-    if (!employeeId) return;
+    // Si no hay un ID de empleado o un usuario, no hacemos nada.
+    if (!employeeId || !user) return;
 
-    // 1. Ponemos los roles basados en el usuario
-    if (user) {
-        setIsAuxiliar(user.role === 'auxiliar');
-        setIsClient(user.role === 'cliente');
-        setIsAdmin(user.role === 'admin');
-        setIsRepartidor(user.role === 'repartidor');
-    }
+    // 1. Establecemos los roles una sola vez al cargar.
+    setIsAuxiliar(user.role === 'auxiliar');
+    setIsClient(user.role === 'cliente');
+    setIsAdmin(user.role === 'admin');
+    setIsRepartidor(user.role === 'repartidor');
 
-    // 2. Definimos la función para cargar los datos del empleado.
-    const fetchData = async () => {
+    // 2. Definimos la función para cargar todos los datos necesarios.
+    const fetchDataForAdmin = async () => {
         setLoading(true);
-        console.log("Intentando cargar historial para el ID:", employeeId);
-
         try {
+            // A. Obtenemos el perfil del empleado.
             const employeeRes = await API.get(`/api/employees/${employeeId}`);
             setEmployeeName(employeeRes.data.fullName);
+
+            // B. Obtenemos los registros de tiempo de ese empleado.
             const logsRes = await API.get(`/api/timelogs/employee/${employeeId}`);
             setTimeLogs(logsRes.data);
+
+            // C. ✨ LA LÓGICA FALTANTE: Obtenemos los datos del cliente asociado ✨
+            // Sacamos el ID del cliente desde el perfil del empleado que acabamos de obtener.
+            const clientId = employeeRes.data.idClient; 
+
+            if (clientId) {
+                // Si el empleado está asociado a un cliente, buscamos sus datos.
+                const clientRes = await API.get(`/api/clients/${clientId}`);
+                const defaultRate = clientRes.data.defaultHourlyRate?.toString() || '0';
+                const holidayRate = clientRes.data.holidayHourlyRate?.toString() || '0';
+                
+                // Guardamos las tarifas
+                setDefaultHourlyRateForClient(defaultRate);
+                setHolidayHourlyRateForClient(holidayRate);
+
+                // Rellenamos el formulario con los datos por defecto del cliente.
+                setFormData(prev => ({ 
+                    ...prev, 
+                    valorHora: defaultRate, 
+                    empresa: clientRes.data.companyName 
+                }));
+            }
         } catch (error) {
             console.error("¡La petición a la API falló!", error);
-            toast.error("Error al cargar el historial del empleado.");
+            toast.error(error.response?.data?.message || "Error al cargar el historial del empleado.");
             navigate('/admin/employees'); 
         } finally {
             setLoading(false); 
         }
     };
     
-    fetchData();
+    // 3. Ejecutamos la función.
+    fetchDataForAdmin();
 
-}, [employeeId]);
+}, [employeeId, user, navigate]);
 
     // Bloque 7: Efecto para Actualizar Cálculos
     useEffect(() => {

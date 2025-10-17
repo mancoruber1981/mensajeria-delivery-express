@@ -12,34 +12,74 @@ const { calculateTimeLogValues } = require('../utils/calculationUtils.js');
 
 // Bloque 2: Crear un nuevo registro de horario (Versión Corregida)
 const createTimeLog = asyncHandler(async (req, res) => {
-    console.log('\n--- 1. INICIANDO createTimeLog ---');
-    console.log('--- 2. DATOS RECIBIDOS (req.body):', req.body);
+    // 1. Obtenemos los datos del formulario Y el usuario que hace la petición
     const { 
-        employee, date, horaInicio, horaFin, valorHora, festivo, 
-        descuentoAlmuerzo, minutosAlmuerzoSinPago, empresa, 
-        totalLoanDeducted, // <-- El dato del préstamo
-        horasBrutas, subtotal, valorNeto 
+        employee, date, horaInicio, horaFin, festivo, 
+        minutosAlmuerzoSinPago, empresa, totalLoanDeducted 
     } = req.body;
+    
+    const user = req.user; // El usuario autenticado, gracias al middleware 'protect'
+    let valorHoraFinal = 0;
 
-    // El backend hace el cálculo final para asegurar que es correcto
-    const valorNetoFinalCalculado = (parseFloat(valorNeto) || 0) - (parseFloat(totalLoanDeducted) || 0);
+    // 2. ✨ LA LÓGICA INTELIGENTE: El backend determina la tarifa correcta ✨
+    if (user.role === 'cliente' || user.role === 'auxiliar') {
+        // Si es cliente o auxiliar, NO confiamos en la tarifa del frontend. La buscamos nosotros.
+        const clientId = user.role === 'cliente' ? user.profile._id : user.associatedClient;
+        if (!clientId) {
+            res.status(400);
+            throw new Error('El usuario actual no está asociado a ningún cliente.');
+        }
 
+        const clientProfile = await Client.findById(clientId).lean();
+        if (!clientProfile) {
+            res.status(404);
+            throw new Error(`Perfil de cliente no encontrado para el ID: ${clientId}`);
+        }
+
+        // Usamos la tarifa festiva o la normal según la casilla 'festivo'
+        valorHoraFinal = festivo 
+            ? (clientProfile.holidayHourlyRate || 0)
+            : (clientProfile.defaultHourlyRate || 0);
+
+    } else {
+        // Si es repartidor o admin, SÍ confiamos en la tarifa que envían desde el formulario
+        valorHoraFinal = parseFloat(req.body.valorHora) || 0;
+    }
+
+    if (valorHoraFinal <= 0) {
+        res.status(400);
+        throw new Error('El valor por hora debe ser mayor a cero.');
+    }
+    
+    // 3. El backend recalcula los totales para máxima seguridad y consistencia
+    const start = new Date(`1970-01-01T${horaInicio}:00`);
+    let end = new Date(`1970-01-01T${horaFin}:00`);
+    if (end < start) end.setDate(end.getDate() + 1);
+
+    const totalDiffMs = end - start;
+    const horasBrutas = totalDiffMs / (1000 * 60 * 60);
+    const subtotal = horasBrutas * valorHoraFinal;
+    const almuerzoDescontado = (minutosAlmuerzoSinPago / 60) * valorHoraFinal;
+    const valorNeto = subtotal - almuerzoDescontado;
+    const valorNetoFinalCalculado = valorNeto - (parseFloat(totalLoanDeducted) || 0);
+
+    // 4. Creamos el nuevo registro de tiempo con todos los datos correctos y calculados
     const newTimeLog = await TimeLog.create({
         employee,
-        user: req.user._id, // Usamos el usuario autenticado
+        user: user._id,
         date,
         horaInicio,
         horaFin,
-        valorHora,
+        valorHora: valorHoraFinal,
         festivo,
-        descuentoAlmuerzo,
-        minutosAlmuerzoSinPago,
+        minutosAlmuerzoSinPago: parseInt(minutosAlmuerzoSinPago) || 0,
+        descuentoAlmuerzo: almuerzoDescontado,
         empresa,
+        totalLoanDeducted: parseFloat(totalLoanDeducted) || 0,
         horasBrutas,
         subtotal,
         valorNeto,
-        totalLoanDeducted: parseFloat(totalLoanDeducted) || 0, // Guardamos el préstamo
-        valorNetoFinal: valorNetoFinalCalculado // Guardamos el valor final correcto
+        valorNetoFinal: valorNetoFinalCalculado
     });
 
     res.status(201).json(newTimeLog);
@@ -91,40 +131,76 @@ const getTimeLogsByEmployeeId = asyncHandler(async (req, res) => {
 
 // Bloque 4: Actualizar un registro de horario (Versión Corregida)
 const updateTimeLog = asyncHandler(async (req, res) => {
-    const timeLog = await TimeLog.findById(req.params.id);
+    // --- CÁMARA 1: ¿Qué estamos recibiendo del frontend? ---
+    console.log('\n\n--- updateTimeLog INICIADO ---');
+    console.log('DATOS RECIBIDOS DEL FORMULARIO (req.body):', req.body);
 
-    if (!timeLog) {
-        res.status(404);
-        throw new Error('Registro no encontrado');
+    const timeLog = await TimeLog.findById(req.params.id);
+    if (!timeLog) {
+        res.status(404);
+        throw new Error('Registro no encontrado');
+    }
+
+    const { 
+        date, horaInicio, horaFin, festivo, 
+        minutosAlmuerzoSinPago, empresa, totalLoanDeducted 
+    } = req.body;
+    
+    const user = req.user;
+    let valorHoraFinal = 0;
+
+    if (user.role === 'cliente' || user.role === 'auxiliar') {
+        const clientId = user.role === 'cliente' ? user.profile._id : user.associatedClient;
+        const clientProfile = await Client.findById(clientId).lean();
+        if (!clientProfile) {
+            res.status(404); throw new Error('Perfil de cliente asociado no encontrado.');
+        }
+        valorHoraFinal = festivo ? (clientProfile.holidayHourlyRate || 0) : (clientProfile.defaultHourlyRate || 0);
+    } else {
+        valorHoraFinal = parseFloat(req.body.valorHora) || 0;
     }
 
-    // Actualizamos el log con todos los datos que lleguen del formulario
-    const { 
-        date, horaInicio, horaFin, valorHora, festivo, 
-        descuentoAlmuerzo, minutosAlmuerzoSinPago, empresa, 
-        totalLoanDeducted, // <-- El dato del préstamo
-        horasBrutas, subtotal, valorNeto 
-    } = req.body;
+    if (valorHoraFinal <= 0) {
+        res.status(400); throw new Error('El valor por hora debe ser mayor a cero.');
+    }
+    
+    const start = new Date(`1970-01-01T${horaInicio}:00`);
+    let end = new Date(`1970-01-01T${horaFin}:00`);
+    if (end < start) end.setDate(end.getDate() + 1);
 
-    // El backend recalcula el valor final para asegurar consistencia
-    const valorNetoFinalCalculado = (parseFloat(valorNeto) || 0) - (parseFloat(totalLoanDeducted) || 0);
+    const totalDiffMs = end - start;
+    const horasBrutas = totalDiffMs / (1000 * 60 * 60);
+    const subtotal = horasBrutas * valorHoraFinal;
+    const almuerzoDescontado = (minutosAlmuerzoSinPago / 60) * valorHoraFinal;
+    const valorNeto = subtotal - almuerzoDescontado;
+    const valorNetoFinalCalculado = valorNeto - (parseFloat(totalLoanDeducted) || 0);
 
-    timeLog.date = date || timeLog.date;
-    timeLog.horaInicio = horaInicio || timeLog.horaInicio;
-    timeLog.horaFin = horaFin || timeLog.horaFin;
-    timeLog.valorHora = valorHora || timeLog.valorHora;
-    timeLog.festivo = festivo ?? timeLog.festivo;
-    timeLog.descuentoAlmuerzo = descuentoAlmuerzo || timeLog.descuentoAlmuerzo;
-    timeLog.minutosAlmuerzoSinPago = minutosAlmuerzoSinPago || timeLog.minutosAlmuerzoSinPago;
-    timeLog.empresa = empresa || timeLog.empresa;
-    timeLog.horasBrutas = horasBrutas || timeLog.horasBrutas;
-    timeLog.subtotal = subtotal || timeLog.subtotal;
-    timeLog.valorNeto = valorNeto || timeLog.valorNeto;
-    timeLog.totalLoanDeducted = totalLoanDeducted || timeLog.totalLoanDeducted;
-    timeLog.valorNetoFinal = valorNetoFinalCalculado; // Guardamos el valor final correcto
+    // --- CÁMARA 2: ¿Qué estamos a punto de guardar en la base de datos? ---
+    console.log('--- VALORES CALCULADOS ANTES DE GUARDAR ---');
+    console.log({
+        valorHoraFinal, horasBrutas, subtotal, 
+        almuerzoDescontado, valorNeto, valorNetoFinalCalculado
+    });
+    console.log('-------------------------------------------');
 
-    const updatedTimeLog = await timeLog.save();
-    res.json(updatedTimeLog);
+    timeLog.date = date;
+    timeLog.horaInicio = horaInicio;
+    timeLog.horaFin = horaFin;
+    timeLog.valorHora = valorHoraFinal;
+    timeLog.festivo = festivo;
+    timeLog.minutosAlmuerzoSinPago = parseInt(minutosAlmuerzoSinPago) || 0;
+    timeLog.empresa = empresa;
+    timeLog.descuentoAlmuerzo = almuerzoDescontado;
+    timeLog.totalLoanDeducted = parseFloat(totalLoanDeducted) || 0;
+    timeLog.horasBrutas = horasBrutas;
+    timeLog.subtotal = subtotal;
+    timeLog.valorNeto = valorNeto;
+    timeLog.valorNetoFinal = valorNetoFinalCalculado;
+
+    const updatedTimeLog = await timeLog.save();
+    console.log('--- DATOS GUARDADOS EXITOSAMENTE EN LA BD ---');
+    console.log('--- FIN updateTimeLog ---\n\n');
+    res.json(updatedTimeLog);
 });
 
 // Bloque 5: Resetear registros de horario (para clientes)

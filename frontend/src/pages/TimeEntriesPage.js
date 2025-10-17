@@ -16,43 +16,48 @@ import './TimeEntriesPage.css';
 // Bloque 2: Definición del Componente y Estado Inicial
 const TimeEntriesPage = () => {
     const { employeeId } = useParams();
-    const navigate = useNavigate();
-    const formRef = useRef(null);
-    const { user } = useAuth();
-    
-    // ✅ CORRECCIÓN: Declara 'clientRates' primero, antes de usarlo.
-    const [clientRates, setClientRates] = useState({ default: '0', holiday: '0' });
-    
-    // ✅ CORRECCIÓN: Ahora estas variables están definidas correctamente.
-    const isAuxiliar = user?.role === 'auxiliar';
-    const isClient = user?.role === 'cliente';
-    const isAdmin = user?.role === 'admin';
-    const defaultHourlyRateForClient = clientRates.default;
-    const holidayHourlyRateForClient = clientRates.holiday;
+    const navigate = useNavigate();
+    const formRef = useRef(null);
+    const { user } = useAuth();
+    
+    const [clientRates, setClientRates] = useState({ default: '0', holiday: '0' });
+    
+    const isAuxiliar = user?.role === 'auxiliar';
+    const isClient = user?.role === 'cliente';
+    const isAdmin = user?.role === 'admin';
+    
+    const [employeeName, setEmployeeName] = useState('Cargando...');
+    const [timeLogs, setTimeLogs] = useState([]);
+    const [editingLog, setEditingLog] = useState(null);
+    const [loading, setLoading] = useState(true);
 
-    const [employeeName, setEmployeeName] = useState('Cargando...');
-    const [timeLogs, setTimeLogs] = useState([]);
-    const [editingLog, setEditingLog] = useState(null);
-    const [loading, setLoading] = useState(true);
+    const [formData, setFormData] = useState({
+        date: new Date().toISOString().split('T')[0],
+        horaInicio: '08:00',
+        horaFin: '16:30',
+        valorHora: '0',
+        festivo: false,
+        minutosAlmuerzoSinPago: '0',
+        empresa: '',
+        montoPrestamoDeducir: '0'
+    });
+    
+    const [horasTotales, setHorasTotales] = useState(0); 
+    const [subtotal, setSubtotal] = useState(0);
+    const [valorNeto, setValorNeto] = useState(0);
+    const [valorFinalConDeducciones, setValorFinalConDeducciones] = useState(0);
+    const [showSettlementModal, setShowSettlementModal] = useState(false);
+    const [settlementDetails, setSettlementDetails] = useState(null);
+    const [deductSS, setDeductSS] = useState(true);
 
-    const [formData, setFormData] = useState({
-        date: new Date().toISOString().split('T')[0],
-        horaInicio: '',
-        horaFin: '',
-        valorHora: '0',
-        festivo: false,
-        minutosAlmuerzoSinPago: '0',
-        empresa: '',
-        montoPrestamoDeducir: '0'
-    });
-    
-    const [horasTotales, setHorasTotales] = useState(0); 
-    const [subtotal, setSubtotal] = useState(0);
-    const [valorNeto, setValorNeto] = useState(0);
-    const [valorFinalConDeducciones, setValorFinalConDeducciones] = useState(0);
-    const [showSettlementModal, setShowSettlementModal] = useState(false);
-    const [settlementDetails, setSettlementDetails] = useState(null);
-    const [deductSS, setDeductSS] = useState(true);
+
+const defaultHourlyRateForClient = clientRates.default;
+const holidayHourlyRateForClient = clientRates.holiday;
+
+
+
+
+
 
     const handleOpenSettlementModal = async () => {
         setLoading(true);
@@ -84,101 +89,94 @@ const TimeEntriesPage = () => {
     };
 
 // Bloque 3: Función de Recálculo de Totales
-    const recalculateTotals = useCallback((data) => {
-        const { horaInicio, horaFin, valorHora, descuentoAlmuerzo, minutosAlmuerzoSinPago, montoPrestamoDeducir } = data;
-        
-        if (horaInicio && horaFin && valorHora) {
-            const start = new Date(`1970-01-01T${horaInicio}:00`);
-            let end = new Date(`1970-01-01T${horaFin}:00`);
-            if (end < start) end.setDate(end.getDate() + 1);
-            
-            const totalDiffMs = end - start;
-            const valorHoraNum = parseFloat(valorHora) || 0;
-            
-            const totalHoursDecimal = totalDiffMs / (1000 * 60 * 60);
-            
-            let almuerzoADescontar = 0;
-            const minutosSinPagoNum = parseInt(minutosAlmuerzoSinPago, 10) || 0;
+    // --- BLOQUE 3 CORREGIDO (VERSIÓN FINAL Y SEGURA PARA TODOS) ---
+const recalculateTotals = useCallback((data) => {
+        const { horaInicio, horaFin, valorHora, minutosAlmuerzoSinPago, montoPrestamoDeducir } = data;
+        
+        if (horaInicio && horaFin && valorHora) {
+            const start = new Date(`1970-01-01T${horaInicio}:00`);
+            let end = new Date(`1970-01-01T${horaFin}:00`);
+            if (end < start) end.setDate(end.getDate() + 1);
+            
+            const totalDiffMs = end - start;
+            const valorHoraNum = parseFloat(valorHora) || 0;
+            const totalHoursDecimal = totalDiffMs / (1000 * 60 * 60);
+            
+            const minutosSinPagoNum = parseInt(minutosAlmuerzoSinPago, 10) || 0;
+            // La lógica unificada que funciona para todos
+            const almuerzoADescontar = (minutosSinPagoNum / 60) * valorHoraNum;
+            
+            const sub = totalHoursDecimal * valorHoraNum;
+            const total = sub - almuerzoADescontar;
+            const prestamoADeducir = parseFloat(montoPrestamoDeducir) || 0;
+            const finalValue = total - prestamoADeducir;
 
-            if (isAuxiliar) {
-                almuerzoADescontar = (minutosSinPagoNum / 60) * valorHoraNum;
-            } else {
-                almuerzoADescontar = parseFloat(descuentoAlmuerzo) || 0;
-            }
-            
-            const sub = totalHoursDecimal * valorHoraNum;
-            
-            const total = sub - almuerzoADescontar;
-            
-            const prestamoADeducir = parseFloat(montoPrestamoDeducir) || 0;
-            const finalValue = total - prestamoADeducir;
-
-            setHorasTotales(totalHoursDecimal); 
-            setSubtotal(sub);
-            setValorNeto(total);
-            setValorFinalConDeducciones(finalValue);
-        } else {
-            setHorasTotales(0);
-            setSubtotal(0);
-            setValorNeto(0);
-            setValorFinalConDeducciones(0);
-        }
-    }, [isAuxiliar]);
+            setHorasTotales(totalHoursDecimal); 
+            setSubtotal(sub);
+            setValorNeto(total);
+            setValorFinalConDeducciones(finalValue);
+        } else {
+            setHorasTotales(0); setSubtotal(0); setValorNeto(0); setValorFinalConDeducciones(0);
+        }
+    }, []);
 
 // Bloque 4: Lógica para Obtener Datos (FetchData)
     const fetchData = useCallback(async () => {
-        if (!employeeId || !user) return;
-        try {
-            setLoading(true);
-            const employeeRes = await API.get(`/api/employees/${employeeId}`);
-            setEmployeeName(employeeRes.data.fullName);
+        if (!employeeId || !user) return;
+        try {
+            setLoading(true);
+            const employeeRes = await API.get(`/api/employees/${employeeId}`);
+            setEmployeeName(employeeRes.data.fullName);
 
-            const logsRes = await API.get(`/api/timelogs/employee/${employeeId}`);
-            setTimeLogs(logsRes.data);
+            const logsRes = await API.get(`/api/timelogs/employee/${employeeId}`);
+            setTimeLogs(logsRes.data);
 
-            if (user.role === 'cliente' || user.role === 'auxiliar') {
-                const clientId = user.role === 'cliente' ? user.profile._id : user.associatedClient;
-                const clientRes = await API.get(`/api/clients/${clientId}`);
-                const defaultRate = clientRes.data.defaultHourlyRate?.toString() || '0';
-                
-                setClientRates({
-                    default: defaultRate,
-                    holiday: clientRes.data.holidayHourlyRate?.toString() || '0'
-                });
-                setFormData(prev => ({ ...prev, valorHora: defaultRate, empresa: clientRes.data.companyName }));
-            }
-        } catch (error) {
-            toast.error(error.response?.data?.message || "Error al cargar datos.");
-            navigate(user.role === 'cliente' ? '/dashboard-cliente' : '/login');
-        } finally {
-            setLoading(false);
-        }
-    }, [employeeId, user, navigate]);
+            if (user.role === 'cliente' || user.role === 'auxiliar') {
+                const clientId = user.role === 'cliente' ? user.profile._id : user.associatedClient;
+                const clientRes = await API.get(`/api/clients/${clientId}`);
+                const defaultRate = clientRes.data.defaultHourlyRate?.toString() || '0';
+                const holidayRate = clientRes.data.holidayHourlyRate?.toString() || '0';
+                
+                setClientRates({ default: defaultRate, holiday: holidayRate });
+                setFormData(prev => ({ ...prev, valorHora: defaultRate, empresa: clientRes.data.companyName }));
+            }
+        } catch (error) {
+            toast.error(error.response?.data?.message || "Error al cargar datos.");
+            navigate(user.role === 'cliente' ? '/dashboard-cliente' : '/login');
+        } finally {
+            setLoading(false);
+        }
+    }, [employeeId, user, navigate]);
 
 // Bloque 5: Hooks de Efecto para Cargar Datos y Actualizar Cálculos
     useEffect(() => {
-        if (user) fetchData();
-    }, [fetchData, user]);
+        if (user) fetchData();
+    }, [fetchData, user]);
+
+    useEffect(() => {
+        recalculateTotals(formData);
+    }, [formData]);
 
     useEffect(() => {
-        recalculateTotals(formData);
-    }, [formData, recalculateTotals]);
-
-    useEffect(() => {
-        if (editingLog) return;
-        let clientCompanyName = '';
-        if (isClient && user.profile?.companyName) {
-            clientCompanyName = user.profile.companyName;
-        } else if (isAuxiliar && user.associatedClientProfile?.companyName) {
-            clientCompanyName = user.associatedClientProfile.companyName;
-        }
-        const rateToApply = formData.festivo ? holidayHourlyRateForClient : defaultHourlyRateForClient;
-        setFormData(prev => ({
-            ...prev,
-            empresa: clientCompanyName,
-            valorHora: (isAuxiliar || isClient) ? rateToApply : prev.valorHora
-        }));
-    }, [user, isClient, isAuxiliar, editingLog, formData.festivo, defaultHourlyRateForClient, holidayHourlyRateForClient]);
+        if (editingLog) {
+            const rateForEdit = (isAuxiliar || isClient)
+                ? (editingLog.festivo ? clientRates.holiday : clientRates.default)
+                : (editingLog.valorHora?.toString() || '0');
+            
+            const logFormatted = {
+                ...formData,
+                date: new Date(editingLog.date).toISOString().split('T')[0],
+                horaInicio: editingLog.horaInicio || '',
+                horaFin: editingLog.horaFin || '',
+                valorHora: rateForEdit,
+                festivo: editingLog.festivo ?? false,
+                minutosAlmuerzoSinPago: editingLog.minutosAlmuerzoSinPago?.toString() || '0',
+                empresa: editingLog.empresa || '',
+                montoPrestamoDeducir: editingLog.totalLoanDeducted?.toString() || '0'
+            };
+            setFormData(logFormatted);
+        }
+    }, [editingLog, clientRates, isAuxiliar, isClient]);
 
 // Bloque 6: Lógica para el Modo Edición
     useEffect(() => {
@@ -215,20 +213,16 @@ const TimeEntriesPage = () => {
     }, [editingLog, recalculateTotals, isAuxiliar, isClient, defaultHourlyRateForClient, holidayHourlyRateForClient]);
 
 // Bloque 7: Manejador de Cambios del Formulario
-    const handleFormChange = (e) => {
-        const { name, value, type, checked } = e.target;
-        if (name === 'festivo' && (isAuxiliar || isClient)) {
-            const newFestivoStatus = checked;
-            const rateToApply = newFestivoStatus ? holidayHourlyRateForClient : defaultHourlyRateForClient;
-            setFormData(prev => ({
-                ...prev,
-                [name]: newFestivoStatus,
-                valorHora: rateToApply
-            }));
-        } else {
-            setFormData(prev => ({ ...prev, [name]: type === 'checkbox' ? checked : value }));
-        }
-    };
+   const handleFormChange = (e) => {
+        const { name, value, type, checked } = e.target;
+        if (name === 'festivo' && (isClient || isAuxiliar)) {
+            const newFestivoStatus = checked;
+            const rateToApply = newFestivoStatus ? clientRates.holiday : clientRates.default;
+            setFormData(prev => ({ ...prev, [name]: newFestivoStatus, valorHora: rateToApply }));
+        } else {
+            setFormData(prev => ({ ...prev, [name]: type === 'checkbox' ? checked : value }));
+        }
+    };
 
 // Bloque 8: Manejador de Envío del Formulario
     const handleSubmit = async (e) => {
@@ -257,7 +251,7 @@ const TimeEntriesPage = () => {
             totalLoanDeducted: parseFloat(formData.montoPrestamoDeducir) || 0,
             horasBrutas: horasTotales,
             subtotal: subtotal,
-            valorNeto: valorNeto
+            valorNetoFinal: valorFinalConDeducciones
         };
 
         try {
@@ -270,9 +264,9 @@ const TimeEntriesPage = () => {
             }
             setFormData({
                 date: new Date().toISOString().split('T')[0],
-                horaInicio: '',
-                horaFin: '',
-                valorHora: (isAuxiliar || isClient) ? (formData.festivo ? holidayHourlyRateForClient : defaultHourlyRateForClient) : '0',
+                horaInicio: '08:00',
+                horaFin: '16:30',
+                valorHora: (isClient || isAuxiliar) ? clientRates.default : '0',
                 festivo: false,
                 descuentoAlmuerzo: '0',
                 minutosAlmuerzoSinPago: '0',
@@ -399,12 +393,23 @@ const totals = calculateTotals(timeLogs);
 
 {/* Bloque 13: Campos del Formulario (Descuentos y Deducciones) */}
                         <div className="form-row">
-                            {!(isAuxiliar) && (
+                            {/* VISTA PARA EL CLIENTE */}
+                            {isClient && (
+                                <div className="form-group form-group-half">
+                                    <label>Tarifa por Hora ($):</label>
+                                    <input type="number" name="valorHora" value={formData.valorHora} readOnly className="read-only-input"/>
+                                </div>
+                            )}
+
+                            {/* VISTA PARA EL ADMIN (el único que puede digitar un descuento manual) */}
+                            {isAdmin && (
                                 <div className="form-group form-group-half">
                                     <label>Descuento Almuerzo ($):</label>
                                     <input type="number" name="descuentoAlmuerzo" value={formData.descuentoAlmuerzo} onChange={handleFormChange} />
                                 </div>
                             )}
+
+                            {/* CAMPO COMÚN PARA TODOS: Minutos de Almuerzo */}
                             <div className="form-group form-group-half">
                                 <label>Minutos de Almuerzo (sin pago):</label>
                                 <input type="number" name="minutosAlmuerzoSinPago" value={formData.minutosAlmuerzoSinPago} onChange={handleFormChange} />
@@ -476,59 +481,69 @@ const totals = calculateTotals(timeLogs);
                 ) : timeLogs.length > 0 ? (
                     <div className="table-responsive-container">
                         <table>
-                            <thead>
-                                <tr>
-                                    <th>Fecha</th>
-                                    <th>Empresa</th>
-                                    <th>Inicio</th>
-                                    <th>Fin</th>
-                                    <th>H. Brutas</th>
-                                    {!(isAuxiliar) && (
-                                        <>
-                                            <th>V. Neto Inicial</th>
-                                            <th>Deducción</th>
-                                            <th>V. Neto Final</th>
-                                        </>
-                                    )}
-                                    <th>Acciones</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {timeLogs.map(log => (
-                                    <tr key={log._id}>
-                                        <td>{new Date(log.date).toLocaleDateString('es-CO', { timeZone: 'UTC' })}</td>
-                                        <td>{log.empresa || 'N/A'}</td>
-                                        <td>{log.horaInicio}</td>
-                                        <td>{log.horaFin}</td>
-                                        <td>
-                                            {log.horasBrutas ? `${Math.floor(log.horasBrutas)}:${Math.round((log.horasBrutas - Math.floor(log.horasBrutas)) * 60).toString().padStart(2, '0')}` : 'N/A'}
-                                        </td>
-                                        {!(isAuxiliar) && (
-                                            <>
-                                                <td>${(log.valorNeto || 0).toLocaleString('es-CO')}</td>
-                                                <td>${(log.totalLoanDeducted || 0).toLocaleString('es-CO')}</td>
-                                                <td>${((log.valorNeto || 0) - (log.totalLoanDeducted || 0)).toLocaleString('es-CO')}</td>
-                                            </>
-                                        )}
-                                       <td className="action-buttons">
-    {(isClient || isAuxiliar) && (
-        <>
-            {/* Si el registro NO está pagado, el cliente/auxiliar puede editarlo */}
-            {!log.isPaid ? (
+    <thead>
+        <tr>
+            <th>Fecha</th>
+            <th>Empresa</th>
+            <th>Inicio</th>
+            <th>Fin</th>
+            <th>H. Brutas</th>
+            {/* Las cabeceras correctas que sí funcionan */}
+            {!(isAuxiliar) && (
                 <>
-                    <button className="button-edit" onClick={() => handleEdit(log)}>Editar</button>
-                    <button className="button-delete" onClick={() => handleDelete(log._id)}>Eliminar</button>
+                    <th>V. Neto Inicial</th>
+                    <th>Deducción</th>
+                    <th>V. Neto Final</th>
                 </>
-            ) : (
-                /* Si el registro YA está pagado, solo ven una etiqueta y no pueden hacer nada */
-                <span className="paid-badge">Liquidado</span>
             )}
-        </>
-    )}
-</td>
-                                    </tr>
-                                ))}
-                            </tbody>
+            <th>Acciones</th>
+        </tr>
+    </thead>
+        <tbody>
+    {timeLogs.map(log => {
+        // Hacemos los cálculos aquí mismo para asegurar que siempre sean correctos
+        const valorNetoInicial = log.subtotal || 0;
+        const deduccionTotal = (log.descuentoAlmuerzo || 0) + (log.totalLoanDeducted || 0);
+        const valorNetoFinal = log.valorNetoFinal || 0;
+
+        return (
+            <tr key={log._id}>
+                <td>{new Date(log.date).toLocaleDateString('es-CO', { timeZone: 'UTC' })}</td>
+                <td>{log.empresa || 'N/A'}</td>
+                <td>{log.horaInicio}</td>
+                <td>{log.horaFin}</td>
+                <td>{log.horasBrutas ? `${Math.floor(log.horasBrutas)}:${Math.round((log.horasBrutas - Math.floor(log.horasBrutas)) * 60).toString().padStart(2, '0')}` : 'N/A'}</td>
+                
+                {/* ✨ LA CORRECCIÓN ESTÁ AQUÍ: CADA DATO EN SU COLUMNA CORRECTA ✨ */}
+            {!(isAuxiliar) && (
+                <>
+                    {/* Columna "V. Neto Inicial" SÍ muestra el subtotal ANTES de descuentos */}
+                    <td>${(log.subtotal || 0).toLocaleString('es-CO')}</td>
+
+                    {/* Columna "Deducción" AHORA SÍ suma el almuerzo y el préstamo */}
+                    <td>${((log.descuentoAlmuerzo || 0) + (log.totalLoanDeducted || 0)).toLocaleString('es-CO')}</td>
+
+                    {/* Columna "V. Neto Final" AHORA SÍ muestra el valor final correcto */}
+                    <td>${(log.valorNetoFinal || 0).toLocaleString('es-CO')}</td>
+                </>
+            )}
+                    
+                    <td className="action-buttons">
+                        {/* Tus botones de acción van aquí */}
+                        {(isClient || isAuxiliar) && !log.isPaid && (
+                            <>
+                                <button className="button-edit" onClick={() => handleEdit(log)}>Editar</button>
+                                <button className="button-delete" onClick={() => handleDelete(log._id)}>Eliminar</button>
+                            </>
+                        )}
+                        {(isClient || isAuxiliar) && log.isPaid && (
+                            <span className="paid-badge">Liquidado</span>
+                        )}
+                    </td>
+                </tr>
+            );
+        })}
+    </tbody>
 
                             {/* ========== INICIO: CÓDIGO A AÑADIR (PASO 2) ========== */}
                             { !isAuxiliar && timeLogs.length > 0 && (

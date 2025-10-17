@@ -18,90 +18,80 @@ const generateToken = (id) => {
 
 // REEMPLAZA DE NUEVO TU FUNCIÓN registerUser CON ESTA VERSIÓN MEJORADA
 const registerUser = asyncHandler(async (req, res) => {
-    const { username, password, role, profile } = req.body;
+    const { username, password, role, profile } = req.body;
 
-    if (!username || !password || !role) {
-        res.status(400);
-        throw new Error('Por favor, ingresa todos los campos requeridos.');
-    }
+    if (!username || !password || !role) {
+        res.status(400);
+        throw new Error('Por favor, ingresa todos los campos requeridos.');
+    }
 
-    const userExists = await User.findOne({ username });
-    if (userExists) {
-        res.status(400);
-        throw new Error('El nombre de usuario ya está registrado.');
-    }
+    const userExists = await User.findOne({ username });
+    if (userExists) {
+        res.status(400);
+        throw new Error('El nombre de usuario ya está registrado.');
+    }
 
-    // Validaciones de perfil
-    if (role === 'repartidor' && profile?.idCard) {
-        if (await Employee.findOne({ idCard: profile.idCard })) {
-            res.status(400);
-            throw new Error('Ya existe un repartidor con esta cédula.');
-        }
-    } else if (role === 'cliente' && profile?.nit) {
-        if (await Client.findOne({ nit: profile.nit })) {
-            res.status(400);
-            throw new Error('Ya existe un cliente/socio con este NIT.');
-        }
-    }
+    if (role === 'repartidor' && profile?.idCard) {
+        if (await Employee.findOne({ idCard: profile.idCard })) {
+            res.status(400);
+            throw new Error('Ya existe un repartidor con esta cédula.');
+        }
+    } else if (role === 'cliente' && profile?.nit) {
+        if (await Client.findOne({ nit: profile.nit })) {
+            res.status(400);
+            throw new Error('Ya existe un cliente/socio con este NIT.');
+        }
+    }
 
-    // Creamos el usuario SIN el email primero
-    const user = new User({
-        username,
-        password,
-        role,
-    });
+    const user = new User({
+        username,
+        password,
+        role,
+    });
 
-    if (user) {
-        let createdProfile = null;
-        let userRoleDiscriminator = role;
+    if (user) {
+        let createdProfile = null;
+        let userRoleDiscriminator = role;
 
-        if (role === 'repartidor') {
-            if (!profile || !profile.fullName || !profile.address || !profile.idCard || !profile.phone || !profile.email) {
+        if (role === 'repartidor') {
+            if (!profile || !profile.fullName || !profile.address || !profile.idCard || !profile.phone || !profile.email) {
+                res.status(400);
+                throw new Error('Faltan datos del perfil del Repartidor.');
+            }
+            user.email = profile.email;
+            
+            // ✨ LA CORRECCIÓN ESTÁ AQUÍ: Se eliminó el guion extra en user._id ✨
+            createdProfile = await Employee.create({ ...profile, user: user._id, role: 'repartidor', employeeType: 'empresa' });
+            user.profile = createdProfile._id;
+            userRoleDiscriminator = 'Employee';
+
+        } else if (role === 'cliente') {
+            if (!profile || !profile.fullNameHolder || !profile.idCard || !profile.nit || !profile.companyName || !profile.email) {
                 res.status(400);
-                throw new Error('Faltan datos del perfil del Repartidor.');
+                throw new Error('Faltan datos del perfil del Cliente.');
             }
-            // --- CORRECCIÓN CLAVE AQUÍ ---
-            // Le asignamos el email al usuario ANTES de guardar
             user.email = profile.email;
-            
-            createdProfile = await Employee.create({ ...profile, user: user._-id, role: 'repartidor', employeeType: 'empresa' });
+            createdProfile = await Client.create({ ...profile, user: user._id });
             user.profile = createdProfile._id;
-            userRoleDiscriminator = 'Employee';
+            userRoleDiscriminator = 'Client';
+        } else {
+            user.profile = null;
+            userRoleDiscriminator = role;
+        }
 
-        } else if (role === 'cliente') {
-    // 1. MODIFICAR ESTA VALIDACIÓN para incluir el email
-    if (!profile || !profile.fullNameHolder || !profile.idCard || !profile.nit || !profile.companyName || !profile.email) {
-        res.status(400);
-        throw new Error('Faltan datos del perfil del Cliente.');
-    }
-    
-    // --- CORRECCIÓN CLAVE AQUÍ (Ya la tenías, solo hay que asegurarse que se use) ---
-    // 2. ESTA LÍNEA AHORA ES FUNDAMENTAL
-    // Copiamos el email del perfil del cliente al modelo principal de Usuario
-    user.email = profile.email;
-    
-    createdProfile = await Client.create({ ...profile, user: user._id });
-    user.profile = createdProfile._id;
-    userRoleDiscriminator = 'Client';
-} else {
-            user.profile = null;
-            userRoleDiscriminator = role;
-        }
+        user.roleDiscriminator = userRoleDiscriminator;
+        
+        await user.save();
 
-        user.roleDiscriminator = userRoleDiscriminator;
-        
-        // Ahora sí, guardamos el usuario con el email ya copiado
-        await user.save();
+        res.status(201).json({
+            success: true,
+            message: 'Registro exitoso. Tu cuenta está pendiente de aprobación.'
+        });
 
-        res.status(201).json({
-            success: true,
-            message: 'Registro exitoso. Tu cuenta está pendiente de aprobación.'
-        });
-
-    } else {
-        res.status(400);
-        throw new Error('Datos de usuario inválidos.');
-    }
+    } else {
+        res.status(400);
+        throw new Error('Datos de usuario inválidos.');
+    }
 });
 // Función para loguear un usuario (VERSIÓN FINAL CORREGIDA)
 const loginUser = asyncHandler(async (req, res) => {

@@ -33,42 +33,46 @@ const DashboardPage = () => {
 
     // --- Lógica de Datos (Corregida y Organizada) ---
     const fetchDashboardData = useCallback(async () => {
-    setLoading(true);
-    setError('');
-    try {
-        const targetClientId = isAdminView ? clientId : user.profile._id;
-        if (!targetClientId) {
-            setLoading(false);
-            return;
-        }
+        setLoading(true);
+        setError('');
+        try {
+            // 1. Determinar el ID del cliente a consultar.
+            const targetClientId = isAdminView ? clientId : user.profile._id;
+            if (!targetClientId) {
+                setLoading(false);
+                return;
+            }
 
-        if (isAdminView) {
-            const { data } = await API.get(`/api/admin/client-dashboard/${targetClientId}`);
-            setClientProfile(data.clientProfile);
-            setDashboardData(data.dashboardData);
-            setAuxiliaries(data.auxiliaries);
-            setDefaultHourlyRate(data.clientProfile.defaultHourlyRate?.toString() || '0');
-            setHolidayHourlyRate(data.clientProfile.holidayHourlyRate?.toString() || '0');
-        } else if (user?.role === 'cliente') {
-            const { data: clientProfileResData } = await API.get(`/api/clients/${targetClientId}`);
-            setClientProfile(clientProfileResData);
-            setDefaultHourlyRate(clientProfileResData.defaultHourlyRate?.toString() || '0');
-            setHolidayHourlyRate(clientProfileResData.holidayHourlyRate?.toString() || '0');
+            // 2. ✨ LÓGICA UNIFICADA Y CORREGIDA ✨
+            // Hacemos las llamadas a la API y luego procesamos los datos según el rol.
             
-            const { data: dashboardResData } = await API.get('/api/clients/dashboard');
-            setDashboardData(dashboardResData);
+            const clientProfileRes = await API.get(`/api/clients/${targetClientId}`);
+            setClientProfile(clientProfileRes.data);
+            setDefaultHourlyRate(clientProfileRes.data.defaultHourlyRate?.toString() || '0');
+            setHolidayHourlyRate(clientProfileRes.data.holidayHourlyRate?.toString() || '0');
+            
+            if (isAdminView) {
+                // Para el admin, las dos llamadas restantes vienen del endpoint de admin
+                const { data } = await API.get(`/api/admin/client-dashboard/${targetClientId}`);
+                setDashboardData(data.dashboardData); // El admin recibe una caja con 'dashboardData' adentro
+                setAuxiliaries(data.auxiliaries);
+            } else if (user?.role === 'cliente') {
+                // Para el cliente, las llamadas vienen de sus propios endpoints
+                const { data: dashboardResData } = await API.get('/api/clients/dashboard');
+                setDashboardData(dashboardResData); // El cliente recibe los datos directamente
+                
+                const { data: auxiliariesResData } = await API.get('/api/clients/me/auxiliaries');
+                setAuxiliaries(auxiliariesResData);
+            }
 
-            const { data: auxiliariesResData } = await API.get('/api/clients/me/auxiliaries');
-            setAuxiliaries(auxiliariesResData);
-        }
-    } catch (err) {
-        const errorMessage = err.response?.data?.message || 'Error al cargar los datos.';
-        setError(errorMessage);
-        toast.error(errorMessage);
-    } finally {
-        setLoading(false);
-    }
-}, [user, clientId, isAdminView]);
+        } catch (err) {
+            const errorMessage = err.response?.data?.message || 'Error al cargar los datos del dashboard.';
+            setError(errorMessage);
+            toast.error(errorMessage);
+        } finally {
+            setLoading(false);
+        }
+    }, [user, clientId, isAdminView]);
 
     useEffect(() => {
         if (user) {

@@ -21,6 +21,7 @@ const {
     getEmployeeSettlementReport,
     generateMasterReport,
     clearTimeLogs,
+   getAuxiliariesForClientByAdmin,
 } = require('../controllers/adminController');
 
 const { protect, authorizeRoles } = require('../middleware/authMiddleware');
@@ -30,6 +31,7 @@ const { protect, authorizeRoles } = require('../middleware/authMiddleware');
 router.get('/stats', protect, authorizeRoles('admin'), getDashboardStats);
 router.get('/client-dashboard/:clientId', protect, authorizeRoles('admin'), getClientDashboardById);
 router.get('/employees/:employeeId/time-entries', protect, authorizeRoles('admin'), getEmployeeHistoryForAdmin);
+
 
 // --- RUTAS DE REPORTES Y EXPORTACIONES ---
 //router.get('/accountant-report', protect, authorizeRoles('admin'), getAccountantLedger);
@@ -47,6 +49,7 @@ router.get('/users/pending', protect, authorizeRoles('admin'), getPendingUsers);
 router.put('/users/:id/approve', protect, authorizeRoles('admin'), approveUser);
 router.post('/clients/:clientId/auxiliaries', protect, authorizeRoles('admin', 'cliente'), createAuxiliaryForClient);
 router.delete('/auxiliaries/:auxiliaryId', protect, authorizeRoles('admin'), deleteAuxiliaryByAdmin);
+router.get('/clients/:clientId/auxiliaries', protect, authorizeRoles('admin'), getAuxiliariesForClientByAdmin);
 
 
 // --- RUTAS PARA LIQUIDACIONES ---
