@@ -95,52 +95,37 @@ const registerUser = asyncHandler(async (req, res) => {
 });
 // Función para loguear un usuario (VERSIÓN FINAL CORREGIDA)
 const loginUser = asyncHandler(async (req, res) => {
-    // ✅ CAMBIO: Ahora esperamos 'email' en lugar de 'username'
-    const { username, password } = req.body;
-
-    if (!username || !password) {
-        res.status(400);
-        throw new Error('Por favor, ingresa el email y la contraseña.');
-    }
-
-    // Buscamos al usuario por su 'username' O 'email', ignorando mayúsculas/minúsculas
-    const user = await User.findOne({
-    $or: [
-        { email: username }, // <-- Usa 'username' aquí
-        { username: username } // <-- Y aquí también
-    ]
-});
+    // ... (Código existente)
 
     // Si encontramos un usuario Y la contraseña coincide...
     if (user && (await user.matchPassword(password))) {
         
-       /* if (user.status !== 'activo') {
+        // 🛑 CORRECCIÓN CLAVE: VERIFICAR EL ESTADO ANTES DE EMITIR EL TOKEN 🛑
+        // Si el estado que usas para los usuarios aprobados es 'activo', cambia 'Aprobado' por 'activo'.
+        if (user.status !== 'activo') { 
+            // Esto bloquea el acceso si no está aprobado (detiene la intrusión)
+            // y detiene el loop porque el frontend recibirá un error 401.
             res.status(401);
-            throw new Error(`Tu cuenta está en estado '${user.status}'. No puedes iniciar sesión.`);
-        } */
+            throw new Error(`Tu cuenta está ${user.status}. No puedes iniciar sesión hasta que sea aprobada.`);
+        }
+        // --------------------------------------------------------------------
 
         // El resto de tu lógica para poblar el perfil está bien
         let profileData = null;
-        if (user.profile) {
-            if (user.role === 'repartidor') {
-                profileData = await Employee.findById(user.profile);
-            } else if (user.role === 'cliente') {
-                profileData = await Client.findById(user.profile);
-            }
-        }
+        // ... (resto de la lógica para buscar el perfil)
         
         res.json({
             _id: user._id,
             username: user.username,
             role: user.role,
-            status: user.status,
+            status: user.status, // Asegúrate de que este valor sea 'Aprobado' o 'activo'
             profile: profileData,
             associatedClient: user.associatedClient,
-            token: generateToken(user._id),
+            token: generateToken(user._id), // Solo se genera el token si el status es correcto
         });
 
     } else {
-        // Si no se encuentra el usuario o la contraseña no coincide, enviamos el error
+        // ... (código de error)
         res.status(401).json({ message: 'Usuario o contraseña inválidos' });
     }
 });
