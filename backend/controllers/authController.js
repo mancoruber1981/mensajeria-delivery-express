@@ -93,51 +93,68 @@ const registerUser = asyncHandler(async (req, res) => {
         throw new Error('Datos de usuario inválidos.');
     }
 });
-// Función para loguear un usuario (VERSIÓN FINAL CORREGIDA)
 const loginUser = asyncHandler(async (req, res) => {
-    // ... (Código existente)
+    const { username, password } = req.body;
 
-    // Si encontramos un usuario Y la contraseña coincide...
+    const user = await User.findOne({
+        $or: [
+            { email: username }, 
+            { username: username } 
+        ]
+    });
+
     if (user && (await user.matchPassword(password))) {
         
-        // 🛑 CORRECCIÓN CLAVE: VERIFICAR EL ESTADO ANTES DE EMITIR EL TOKEN 🛑
-        // Si el estado que usas para los usuarios aprobados es 'activo', cambia 'Aprobado' por 'activo'.
-        if (user.status !== 'Aprobado') { 
-            // Esto bloquea el acceso si no está aprobado (detiene la intrusión)
-            // y detiene el loop porque el frontend recibirá un error 401.
+        // 🛑 CORRECCIÓN DE ESTADO: Bloquea si el status EXISTE Y NO es 'activo'. 
+        // Permite si el status NO EXISTE (usuarios legacy) O si ES 'activo'.
+        if (user.status && user.status !== 'activo') {
             res.status(401);
             throw new Error(`Tu cuenta está ${user.status}. No puedes iniciar sesión hasta que sea aprobada.`);
         }
-        // --------------------------------------------------------------------
 
-        // El resto de tu lógica para poblar el perfil está bien
         let profileData = null;
-        // ... (resto de la lógica para buscar el perfil)
+        let associatedClientProfile = null;
+
+        // Lógica para obtener el perfil (similar a tu getUserProfile)
+        if (user.profile && mongoose.Types.ObjectId.isValid(user.profile)) {
+            if (user.role === 'repartidor') {
+                profileData = await Employee.findById(user.profile);
+            } else if (user.role === 'cliente') {
+                profileData = await Client.findById(user.profile);
+            }
+        }
+
+        if (user.role === 'auxiliar' && user.associatedClient && mongoose.Types.ObjectId.isValid(user.associatedClient)) {
+            associatedClientProfile = await Client.findById(user.associatedClient);
+        }
         
         res.json({
             _id: user._id,
             username: user.username,
             role: user.role,
-            status: user.status, // Asegúrate de que este valor sea 'Aprobado' o 'activo'
+            status: user.status, // Es crucial devolver el estado
             profile: profileData,
             associatedClient: user.associatedClient,
-            token: generateToken(user._id), // Solo se genera el token si el status es correcto
+            associatedClientProfile: associatedClientProfile,
+            token: generateToken(user._id),
         });
 
     } else {
-        // ... (código de error)
         res.status(401).json({ message: 'Usuario o contraseña inválidos' });
     }
 });
-// Obtener detalles del usuario autenticado y su perfil
 const getUserProfile = asyncHandler(async (req, res) => {
-    const user = req.user; // Este user ya tiene su role
-    if (!user) {
-        res.status(404);
-        throw new Error('Usuario no encontrado');
+    
+    // 🛑 CORRECCIÓN CLAVE: Verifica si req.user existe ANTES de intentar usarlo.
+    if (!req.user) {
+        res.status(401); 
+        throw new Error('No autorizado. El perfil de usuario no pudo ser cargado.');
     }
+    
+    const user = req.user; // Ahora esta línea es segura
     let profileData = null;
     let associatedClientProfile = null;
+
     // Popula el perfil asociado (Employee o Client) si user.profile existe y es un ID válido
     if (user.profile && mongoose.Types.ObjectId.isValid(user.profile)) {
         if (user.role === 'repartidor') {
@@ -146,14 +163,17 @@ const getUserProfile = asyncHandler(async (req, res) => {
             profileData = await Client.findById(user.profile);
         }
     }
+
     // Popula el perfil del cliente asociado para los auxiliares si user.associatedClient existe y es un ID válido
     if (user.role === 'auxiliar' && user.associatedClient && mongoose.Types.ObjectId.isValid(user.associatedClient)) {
         associatedClientProfile = await Client.findById(user.associatedClient);
     }
+
     res.json({
         _id: user._id,
         username: user.username,
         role: user.role,
+        status: user.status, // Asegúrate de incluir el status aquí también
         profile: profileData,
         associatedClient: user.associatedClient,
         associatedClientProfile: associatedClientProfile,
