@@ -102,7 +102,7 @@ const loginUser = asyncHandler(async (req, res) => {
         
         // 🛑 CORRECCIÓN CLAVE: VERIFICAR EL ESTADO ANTES DE EMITIR EL TOKEN 🛑
         // Si el estado que usas para los usuarios aprobados es 'activo', cambia 'Aprobado' por 'activo'.
-        if (user.status !== 'activo') { 
+        if (user.status !== 'Aprobado') { 
             // Esto bloquea el acceso si no está aprobado (detiene la intrusión)
             // y detiene el loop porque el frontend recibirá un error 401.
             res.status(401);
