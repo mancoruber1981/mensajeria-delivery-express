@@ -8,9 +8,10 @@ const {
   getClients,
   getClientDashboardData,
   getClientById,
-  updateClientHourlyRate,
+  updateHourlyRates,
   exportClientTimeLogsToExcel,
-  getClientAuxiliaries // <-- ¡AÑADIDO!
+  getClientAuxiliaries,
+  deleteAuxiliar
 } = require('../controllers/clientController');
 
 const { protect, authorizeRoles } = require('../middleware/authMiddleware');
@@ -43,7 +44,7 @@ router.route('/:id').get(protect, authorizeRoles('admin', 'auxiliar', 'cliente')
 // @desc    Actualizar las tarifas horarias (por defecto y festiva) de un cliente
 // @access  Private (Cliente, Admin)
 // En backend/routes/clients.js
-router.route('/:id/hourly-rates').put(protect, authorizeRoles('cliente', 'admin'), updateClientHourlyRate);
+router.route('/:id/hourly-rates').put(protect, authorizeRoles('cliente', 'admin'), updateHourlyRates);
 // @route   GET /api/clients/me/export-timelogs
 // @desc    Exportar registros de tiempo del cliente a Excel
 // @access  Private (Cliente)
