@@ -54,17 +54,28 @@ const getClientById = asyncHandler(async (req, res) => {
     res.status(200).json(client);
 });
 
-const updateClientHourlyRate = asyncHandler(async (req, res) => {
+const updateHourlyRates = asyncHandler(async (req, res) => {
     const { defaultHourlyRate, holidayHourlyRate } = req.body;
-    // La ruta debe ser /:id/hourly-rates
-    const client = await Client.findById(req.params.id);
-    if (!client) { throw new Error('Cliente no encontrado'); }
-    client.defaultHourlyRate = defaultHourlyRate;
-    client.holidayHourlyRate = holidayHourlyRate;
-    const updatedClient = await client.save();
+    
+    // Cambiamos .save() por findByIdAndUpdate para saltar validaciones de dirección
+    const updatedClient = await Client.findByIdAndUpdate(
+        req.params.id,
+        { 
+            $set: { 
+                defaultHourlyRate: Number(defaultHourlyRate), 
+                holidayHourlyRate: Number(holidayHourlyRate) 
+            } 
+        },
+        { new: true, runValidators: false } // 👈 Esto es lo que permite los $22.600
+    );
+
+    if (!updatedClient) {
+        res.status(404);
+        throw new Error('Cliente no encontrado');
+    }
+
     res.json(updatedClient);
 });
-
 // Bloque 4: Dashboard del cliente (CORREGIDO)
 const getClientDashboardData = asyncHandler(async (req, res) => {
     const client = await Client.findById(req.user.profile._id).populate('employees', 'fullName idCard phone');
@@ -265,6 +276,7 @@ const deleteAuxiliar = asyncHandler(async (req, res) => {
 module.exports = {
     getClients,
     getClientById,
+    updateHourlyRates,
     updateClientHourlyRate,
     getClientDashboardData,
     exportClientTimeLogsToExcel,
