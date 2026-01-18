@@ -73,3 +73,31 @@ const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
     console.log(`🚀 Servidor corriendo en puerto ${PORT}`);
 });
+
+// ==================== 🛠️ RESETEO SEGURO (Reemplaza el anterior) ====================
+const User = require('./models/User');
+const bcrypt = require('bcryptjs'); // o 'bcrypt' según cual instalaste
+
+const resetAdminPass = async () => {
+    try {
+        // Generamos el hash directamente para evitar el error de argumentos
+        const hashed = await bcrypt.hash('admin123', 10); 
+        
+        const userUpdated = await User.findOneAndUpdate(
+            { username: 'ruman' }, 
+            { password: hashed },
+            { new: true }
+        );
+
+        if (userUpdated) {
+            console.log('--------------------------------------------------');
+            console.log('✅ CONTRASEÑA DE "ruman" ACTUALIZADA A: admin123');
+            console.log('--------------------------------------------------');
+        } else {
+            console.log('⚠️ No se encontró al usuario "ruman" en la base de datos.');
+        }
+    } catch (err) {
+        console.log('❌ Error al resetear contraseña:', err.message);
+    }
+};
+resetAdminPass();
