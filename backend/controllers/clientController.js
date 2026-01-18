@@ -276,8 +276,7 @@ const deleteAuxiliar = asyncHandler(async (req, res) => {
 module.exports = {
     getClients,
     getClientById,
-    updateHourlyRates,
-    updateClientHourlyRate,
+    updateHourlyRates, 
     getClientDashboardData,
     exportClientTimeLogsToExcel,
     getClientAuxiliaries,
