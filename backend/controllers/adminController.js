@@ -674,18 +674,20 @@ const getEmployeeSettlementReport = asyncHandler(async (req, res) => {
     const detailsSheet = workbook.addWorksheet('Detalle de Registros');
 
     // --- CAMBIO 1: AÑADIR LAS NUEVAS COLUMNAS DE HORAS ---
-    detailsSheet.columns = [
-        { header: 'Fecha', key: 'date', width: 15, style: { numFmt: 'dd/mm/yyyy' } },
-        { header: 'Empresa', key: 'empresa', width: 25 },
-        { header: 'Hora Inicio', key: 'horaInicio', width: 15 },
-        { header: 'Hora Fin', key: 'horaFin', width: 15 },
-        { header: 'Total Horas (HH:MM)', key: 'totalHorasCalculadas', width: 20 },
-        { header: 'Subtotal', key: 'subtotal', width: 18, style: { numFmt: '$ #,##0.00' } },
-        { header: 'Desc. Almuerzo', key: 'descuentoAlmuerzo', width: 18, style: { numFmt: '$ #,##0.00' } },
-        { header: 'Deducción Préstamo (Ind.)', key: 'totalLoanDeducted', width: 18, style: { numFmt: '$ #,##0.00' } },
-        { header: 'Valor Neto Final', key: 'valorNetoFinal', width: 18, style: { numFmt: '$ #,##0.00' } },
-        { header: 'Estado', key: 'estado', width: 15 },
-    ];
+    // --- DENTRO DE getEmployeeSettlementReport ---
+detailsSheet.columns = [
+    { header: 'Fecha', key: 'date', width: 15, style: { numFmt: 'dd/mm/yyyy' } },
+    { header: 'Empresa', key: 'empresa', width: 25 },
+    { header: 'Hora Inicio', key: 'horaInicio', width: 15 },
+    { header: 'Hora Fin', key: 'horaFin', width: 15 },
+    { header: 'Total Horas (HH:MM)', key: 'totalHorasCalculadas', width: 20 },
+    { header: 'Valor Hora', key: 'valorHora', width: 15, style: { numFmt: '$ #,##0' } }, // 👈 NUEVA COLUMNA
+    { header: 'Subtotal', key: 'subtotal', width: 18, style: { numFmt: '$ #,##0' } },
+    { header: 'Desc. Almuerzo', key: 'descuentoAlmuerzo', width: 18, style: { numFmt: '$ #,##0' } },
+    { header: 'Deducción Préstamo (Ind.)', key: 'totalLoanDeducted', width: 18, style: { numFmt: '$ #,##0' } },
+    { header: 'Valor Neto Final', key: 'valorNetoFinal', width: 18, style: { numFmt: '$ #,##0' } },
+    { header: 'Estado', key: 'estado', width: 15 },
+];
     
     // --- CAMBIO 2: CALCULAR LAS HORAS PARA CADA FILA ---
     let totalMinutesForEmployee = 0;
@@ -704,18 +706,20 @@ const getEmployeeSettlementReport = asyncHandler(async (req, res) => {
         const minutes = logDurationMinutes % 60;
         const totalHorasFormato = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
 
-        return {
-            date: new Date(log.date),
-            empresa: log.empresa,
-            horaInicio: log.horaInicio || 'N/A',
-            horaFin: log.horaFin || 'N/A',
-            totalHorasCalculadas: totalHorasFormato,
-            subtotal: log.subtotal,
-            descuentoAlmuerzo: log.descuentoAlmuerzo,
-            totalLoanDeducted: log.totalLoanDeducted,
-            valorNetoFinal: log.valorNetoFinal,
-            estado: log.isPaid ? 'Pagado' : 'Pendiente'
-        };
+        // --- DENTRO DEL map de detailsData ---
+
+            return {
+    date: new Date(log.date),
+    empresa: log.empresa,
+    horaInicio: log.horaInicio || 'N/A',
+    horaFin: log.horaFin || 'N/A',
+    totalHorasCalculadas: totalHorasFormato,
+    valorHora: log.festivo ? (client.holidayHourlyRate || 0) : (client.defaultHourlyRate || 0),
+    subtotal: log.subtotal,
+    descuentoAlmuerzo: log.descuentoAlmuerzo,
+    valorNetoFinal: log.valorNetoFinal,
+    estado: log.isPaid ? 'Pagado' : 'Pendiente'
+};
     });
     detailsSheet.addRows(detailsData);
     
@@ -728,16 +732,16 @@ const getEmployeeSettlementReport = asyncHandler(async (req, res) => {
 
         const totalRow = detailsSheet.addRow([]); // Fila vacía
         const totalRowData = {
-            'totalHorasCalculadas': formattedTotalHours,
-            'valorNetoFinal': { formula: `SUM(I2:I${1 + dataRowCount})` } // OJO: La columna ahora es la I
-        };
-        const addedTotalRow = detailsSheet.addRow(totalRowData);
+    'totalHorasCalculadas': formattedTotalHours,
+    'valorNetoFinal': { formula: `SUM(J2:J${1 + dataRowCount})` } // 👈 Antes era I, ahora es J
+};
+const addedTotalRow = detailsSheet.addRow(totalRowData);
 
-        // Ponemos la etiqueta "TOTAL:" en la columna correcta antes de los valores
-        detailsSheet.getCell(`H${addedTotalRow.number}`).value = 'TOTAL:'; // OJO: Columna H
-        detailsSheet.getCell(`H${addedTotalRow.number}`).font = { bold: true };
-        detailsSheet.getCell(`H${addedTotalRow.number}`).alignment = { horizontal: 'right' };
-        addedTotalRow.font = { bold: true };
+// Ponemos la etiqueta "TOTAL:" en la columna I (antes estaba en H)
+detailsSheet.getCell(`I${addedTotalRow.number}`).value = 'TOTAL:'; 
+detailsSheet.getCell(`I${addedTotalRow.number}`).font = { bold: true };
+detailsSheet.getCell(`I${addedTotalRow.number}`).alignment = { horizontal: 'right' };
+addedTotalRow.font = { bold: true };
     }
 
     const fileName = `Reporte_${employee.fullName.replace(/\s/g, '_')}_${start.toISOString().slice(0,10)}.xlsx`;
