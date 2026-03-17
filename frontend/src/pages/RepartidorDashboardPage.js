@@ -575,7 +575,7 @@ const totals = calculateTotals(timeLogs);
                 // Si NO está pagado, muestra los botones de acción
                 <>
                     <button className="button-edit" onClick={() => handleEdit(log)}>Editar</button>
-                    <button className="button-delete" onClick={() => handleDelete(log._id)}>Eliminar</button>
+                    {/* <button className="button-delete" onClick={() => handleDelete(log._id)}>Eliminar</button> */}
                 </>
             ) : (
                 // Si SÍ está pagado, muestra solo la etiqueta
