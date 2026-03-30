@@ -714,7 +714,7 @@ detailsSheet.columns = [
     horaInicio: log.horaInicio || 'N/A',
     horaFin: log.horaFin || 'N/A',
     totalHorasCalculadas: totalHorasFormato,
-    valorHora: log.festivo ? (client.holidayHourlyRate || 0) : (client.defaultHourlyRate || 0),
+    valorHora: log.festivo ? (log.valorHoraFestiva || 0) : (log.valorHoraNormal || 0),
     subtotal: log.subtotal,
     descuentoAlmuerzo: log.descuentoAlmuerzo,
     valorNetoFinal: log.valorNetoFinal,
