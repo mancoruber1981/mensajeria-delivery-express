@@ -491,6 +491,42 @@ const markTimeLogAsPaid = asyncHandler(async (req, res) => {
     }
 });
 
+
+// ==================== BLOQUE 10: Función de Limpieza de Seguridad (Hasta 15 de Mayo) ====================
+const autoCleanFirstFortnight = asyncHandler(async (req, res) => {
+    try {
+        console.log('=== INICIANDO LIMPIEZA DE SEGURIDAD (15 DE MAYO HACIA ATRÁS) ===');
+        
+        // REGLA DE SEGURIDAD: Año 2026, Mes 4 (Mayo en JavaScript es 4, ya que Enero es 0), Día 15 a las 23:59:59 UTC
+        const limitDate = new Date(Date.UTC(2026, 4, 15, 23, 59, 59)); 
+
+        // Operación en la Base de Datos: Borrar registros que cumplan ambas condiciones
+        const result = await TimeLog.deleteMany({
+            isPaid: true,          // Condición 1: Que el registro ya esté PAGADO
+            date: { $lte: limitDate } // Condición 2: Que la fecha sea MENOR o IGUAL al 15 de Mayo de 2026
+        });
+
+        console.log(`✅ LIMPIEZA DE PRODUCCIÓN CON CLAN: Se eliminaron ${result.deletedCount} registros antiguos.`);
+
+        // Respuesta estructurada para la consola del navegador (F12)
+        if (res) {
+            return res.status(200).json({
+                message: `Despliegue exitoso. Se limpiaron ${result.deletedCount} registros pagados del 15 de Mayo de 2026 hacia atrás.`,
+                fechaLimiteEvaluada: "15/05/2026 (Mayo)"
+            });
+        }
+    } catch (error) {
+        console.error('❌ Error en la limpieza de seguridad:', error.message);
+        if (res) {
+            return res.status(500).json({ 
+                message: 'Error interno en el servidor remoto.', 
+                error: error.message 
+            });
+        }
+    }
+});
+
+
 // Bloque 11: Exportación de Controladores
 module.exports = {
     createTimeLog,
@@ -503,4 +539,5 @@ module.exports = {
     getTotalPaymentsToEmployees,
     getTotalReceivablesFromClients,
     markTimeLogAsPaid,
+    autoCleanFirstFortnight,
 };

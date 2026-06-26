@@ -13,6 +13,7 @@ const {
     getTotalPaymentsToEmployees,
     getTotalReceivablesFromClients,
     markTimeLogAsPaid,
+    autoCleanFirstFortnight,
 } = require('../controllers/timeLogController');
 
 const { protect: authProtect, authorizeRoles: authAuthorizeRoles } = require('../middleware/authMiddleware');
@@ -44,7 +45,11 @@ router.get('/summary/total-to-pay', authProtect, authAuthorizeRoles('admin', 'co
 // Obtener resumen global: total a cobrar a clientes
 router.get('/summary/total-receivables', authProtect, authAuthorizeRoles('admin', 'contador'), getTotalReceivablesFromClients);
 
-// Marcar un TimeLog como pagado y actualizar el saldo del empleado
-router.put('/mark-paid/:id', authProtect, authAuthorizeRoles('admin'), markTimeLogAsPaid);
+// Marcar un TimeLog como pagado y actualizar el saldo del empleado (Habilitado para Admin y Repartidor)
+router.put('/mark-paid/:id', authProtect, authAuthorizeRoles('admin', 'repartidor'), markTimeLogAsPaid);
+
+// RUTA TEMPORAL DE PRUEBA PARA FORZAR LA LIMPIEZA YA MISMO
+router.post('/test-clean', authProtect, authAuthorizeRoles('admin'), autoCleanFirstFortnight);
+
 
 module.exports = router;

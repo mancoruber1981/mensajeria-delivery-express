@@ -100,4 +100,18 @@ const resetAdminPass = async () => {
         console.log('❌ Error al resetear contraseña:', err.message);
     }
 };
+
+// backend/server.js
+const cron = require('node-cron');
+// Importas la función que creamos (ajusta la ruta si es necesario)
+const { autoCleanFirstFortnight } = require('./controllers/timeLogController');
+
+// Programación: "0 0 1 * *" significa: Minuto 0, Hora 0, Día 1, De cada mes, Cualquier día de la semana.
+cron.schedule('0 0 1 * *', () => {
+    autoCleanFirstFortnight();
+}, {
+    scheduled: true,
+    timezone: "America/Bogota" // Ajustamos a tu zona horaria para que corra exactamente a la media noche de tu país
+});
+console.log('⏰ Tarea programada de limpieza mensual activada.');
 resetAdminPass();
