@@ -497,28 +497,36 @@ const autoCleanFirstFortnight = asyncHandler(async (req, res) => {
     try {
         console.log('=== INICIANDO LIMPIEZA DE SEGURIDAD (15 DE MAYO HACIA ATRÁS) ===');
         
-        // REGLA DE SEGURIDAD: Año 2026, Mes 4 (Mayo en JavaScript es 4, ya que Enero es 0), Día 15 a las 23:59:59 UTC
-        const limitDate = new Date(Date.UTC(2026, 4, 15, 23, 59, 59)); 
+        // Formato 1: Objeto de fecha real para JS/MongoDB
+        const limitDateObj = new Date(Date.UTC(2026, 4, 15, 23, 59, 59)); 
+        
+        // Formato 2: Formato estándar de texto (String) como lo envía el frontend
+        const limitDateStr = "2026-05-15"; 
 
-        // Operación en la Base de Datos: Borrar registros que cumplan ambas condiciones
+        // Operación en la Base de Datos: Borrar registros pagados que cumplan cualquiera de los dos formatos de fecha
         const result = await TimeLog.deleteMany({
-            isPaid: true,          // Condición 1: Que el registro ya esté PAGADO
-            date: { $lte: limitDate } // Condición 2: Que la fecha sea MENOR o IGUAL al 15 de Mayo de 2026
+            isPaid: true, // Condición obligatoria: Que esté PAGADO
+            $or: [
+                { date: { $lte: limitDateObj } }, // Si se guardó como objeto de fecha real
+                { date: { $lte: limitDateStr } }  // Si se guardó como texto plano "YYYY-MM-DD"
+            ]
         });
 
         console.log(`✅ LIMPIEZA DE PRODUCCIÓN CON CLAN: Se eliminaron ${result.deletedCount} registros antiguos.`);
 
-        // Respuesta estructurada para la consola del navegador (F12)
         if (res) {
             return res.status(200).json({
-                message: `Despliegue exitoso. Se limpiaron ${result.deletedCount} registros pagados del 15 de Mayo de 2026 hacia atrás.`,
-                fechaLimiteEvaluada: "15/05/2026 (Mayo)"
+                success: true,
+                message: `Despliegue exitoso. Se limpiaron de raíz ${result.deletedCount} registros pagados del 15 de Mayo de 2026 hacia atrás.`,
+                registrosEliminados: result.deletedCount,
+                fechaLimiteEvaluada: "15/05/2026 (Formatos Combinados)"
             });
         }
     } catch (error) {
         console.error('❌ Error en la limpieza de seguridad:', error.message);
         if (res) {
             return res.status(500).json({ 
+                success: false,
                 message: 'Error interno en el servidor remoto.', 
                 error: error.message 
             });
