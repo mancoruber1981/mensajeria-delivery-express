@@ -348,14 +348,15 @@ const RepartidorDashboardPage = () => {
 
 // ==================== BLOQUE 11: Manejadores de Liquidación y Pago ====================
     const handlePaid = async (logId) => {
-        if (user?.role !== 'admin') {
-            toast.error("Acceso denegado. Solo los administradores pueden marcar registros como pagados.");
-            return;
-        }
+        // ✨ Se elimina la restricción estricta del frontend para permitir al repartidor autoliquidarse.
+        const confirmMessage = isRepartidorView 
+            ? '¿Estás seguro de que recibiste el pago y quieres marcar este registro como PAGADO?' 
+            : '¿Estás seguro de que quieres marcar este registro como PAGADO?';
 
-        if (window.confirm('¿Estás seguro de que quieres marcar este registro como PAGADO?')) {
+        if (window.confirm(confirmMessage)) {
             try {
-                await API.put(`/timelogs/mark-paid/${logId}`);
+                // Ajustamos la ruta para que coincida con tu API base
+                await API.put(`/api/timelogs/mark-paid/${logId}`);
                 toast.success('Registro marcado como pagado con éxito.');
                 fetchRepartidorData();
             } catch (err) {
@@ -569,17 +570,32 @@ const totals = calculateTotals(timeLogs);
             )}
         </>
     ) : isRepartidorView ? (
-        // --- VISTA PARA EL REPARTIDOR ---
+        // --- VISTA PARA EL REPARTIDOR (BOTÓN NEGRO COMPLETO) ---
         <>
             {!log.isPaid ? (
-                // Si NO está pagado, muestra los botones de acción
                 <>
                     <button className="button-edit" onClick={() => handleEdit(log)}>Editar</button>
-                    {/* <button className="button-delete" onClick={() => handleDelete(log._id)}>Eliminar</button> */}
+                    
+                    {/* Botón con estilo negro forzado mediante inline CSS */}
+                    <button 
+                        className="button-success" 
+                        onClick={() => handlePaid(log._id)} 
+                        style={{ 
+                            marginLeft: '5px', 
+                            backgroundColor: '#000000', // ✅ Cambiado a negro
+                            color: '#ffffff',           // Texto en blanco para alto contraste
+                            border: 'none', 
+                            padding: '6px 12px', 
+                            borderRadius: '4px', 
+                            fontWeight: 'bold', 
+                            cursor: 'pointer' 
+                        }}
+                    >
+                        Marcar Pagado
+                    </button>
                 </>
             ) : (
-                // Si SÍ está pagado, muestra solo la etiqueta
-                <span className="paid-badge">Pagado</span>
+                <span className="paid-badge" style={{ backgroundColor: '#e6ffed', color: '#28a745', padding: '4px 8px', borderRadius: '4px', fontWeight: 'bold' }}>Cobrado ✓</span>
             )}
         </>
     ) : null }
